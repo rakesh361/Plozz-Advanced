@@ -16,7 +16,7 @@ with (root / 'SHA256SUMS').open('w') as stream:
 notes = (f'Plozz Advanced, based on upstream {p["upstream_tag"]}.\n\n'
          'TrueHD Atmos, DTS:X and dual-layer Dolby Vision support retained. '
          'Device build and scoped simulator checks passed.\n\n'
-         'Unsigned IPA for local signing with tvsign. Matching patched source, '
+         'Unsigned tvOS IPA. Matching patched source, '
          'dependency versions and checksums are included.\n\n'
          f'Upstream source: https://github.com/{p["upstream_repository"]}/commit/{p["upstream_commit"]}\n\n'
          f'Build recipe: https://github.com/{p["automation_repository"]}/tree/{p["automation_commit"]}\n\n'

@@ -83,7 +83,7 @@ def package(app, output):
         'compiled_traits': sorted(set(config['required_traits']) & compiled_traits),
     }
     (output / 'provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
-    # tvsign accepts GitHub asset digests or this specific sidecar naming scheme.
+    # Keep a checksum sidecar alongside the IPA.
     (output / (ipa.name + '.sha256')).write_text(provenance['ipa_sha256'] + '\n')
     with (output / 'SHA256SUMS').open('w') as stream:
         for filename in ('Plozz-Personal-tvOS.ipa', 'Package.resolved', 'provenance.json'):

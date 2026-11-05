@@ -16,13 +16,7 @@ the same check manually.
 Each release includes the unsigned IPA, matching patched source, dependency
 versions and checksums.
 
-## Signing and installation
-
-Use tvsign to sign and install the IPA locally. Keep approval for new app versions
-manual if you want to choose when to install an update.
-
-The app uses a separate identity from official Plozz. About displays the upstream
-release version and build.
+Unsigned tvOS IPAs are available from [Releases](https://github.com/rakesh361/Plozz-Advanced/releases).
 
 GPLv3 and the upstream App Store exception apply; see the included licence files.
 Exact dependency sources and notices are provided by the patched source snapshot.
