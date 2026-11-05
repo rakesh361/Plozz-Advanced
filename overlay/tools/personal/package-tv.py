@@ -65,7 +65,7 @@ def package(app, output):
     payload = output / 'Payload'
     payload.mkdir()
     subprocess.run(['ditto', str(app), str(payload / app.name)], check=True)
-    ipa = output / 'Plozz-Personal-tvOS.ipa'
+    ipa = output / 'Plozz-Advanced-tvOS.ipa'
     subprocess.run(['ditto', '-c', '-k', '--keepParent', str(payload), str(ipa)], check=True)
     shutil.copy2(ROOT / 'Package.resolved', output / 'Package.resolved')
     recipe = json.loads((ROOT / 'personal/recipe.json').read_text())
@@ -86,7 +86,7 @@ def package(app, output):
     # Keep a checksum sidecar alongside the IPA.
     (output / (ipa.name + '.sha256')).write_text(provenance['ipa_sha256'] + '\n')
     with (output / 'SHA256SUMS').open('w') as stream:
-        for filename in ('Plozz-Personal-tvOS.ipa', 'Package.resolved', 'provenance.json'):
+        for filename in ('Plozz-Advanced-tvOS.ipa', 'Package.resolved', 'provenance.json'):
             digest = hashlib.sha256((output / filename).read_bytes()).hexdigest()
             stream.write(f'{digest}  {filename}\n')
 

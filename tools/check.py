@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 
 UPSTREAM = 'brandomoore/Plozz'
-ASSETS = {'Plozz-Personal-tvOS.ipa', 'Plozz-Personal-tvOS.ipa.sha256',
+ASSETS = {'Plozz-Advanced-tvOS.ipa', 'Plozz-Advanced-tvOS.ipa.sha256',
           'provenance.json', 'Package.resolved', 'SHA256SUMS', 'Plozz-Advanced-source.tar.gz'}
 
 

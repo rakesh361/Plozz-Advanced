@@ -55,6 +55,6 @@ xcodebuild build -hideShellScriptEnvironment -project Plozz.xcodeproj -scheme Pl
 cmp Package.resolved Plozz.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 app="$output/DerivedData/Build/Products/Debug-appletvos/Plozz.app"
 python3 tools/personal/package-tv.py "$app" "$output"
-echo "Unsigned IPA ready for local signing: $output/Plozz-Personal-tvOS.ipa"
+echo "Unsigned IPA ready for local signing: $output/Plozz-Advanced-tvOS.ipa"
 }
 ( main ) 2>&1 | tee "$output/build.log"

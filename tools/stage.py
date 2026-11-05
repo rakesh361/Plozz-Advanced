@@ -9,7 +9,7 @@ p = json.loads((root / 'provenance.json').read_text())
 source = root / 'Plozz-Advanced-source.tar.gz'
 p['source_archive_sha256'] = hashlib.sha256(source.read_bytes()).hexdigest()
 (root / 'provenance.json').write_text(json.dumps(p, indent=2) + '\n')
-files = ['Plozz-Personal-tvOS.ipa', 'Package.resolved', 'provenance.json', 'Plozz-Advanced-source.tar.gz']
+files = ['Plozz-Advanced-tvOS.ipa', 'Package.resolved', 'provenance.json', 'Plozz-Advanced-source.tar.gz']
 with (root / 'SHA256SUMS').open('w') as stream:
     for name in files:
         stream.write(f'{hashlib.sha256((root / name).read_bytes()).hexdigest()}  {name}\n')

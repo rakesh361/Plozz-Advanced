@@ -72,8 +72,8 @@ jobs:
         id: artifact
         run: |
           set -euo pipefail
-          cp work/source/.build/personal/build-*/Plozz-Personal-tvOS.ipa dist/
-          cp work/source/.build/personal/build-*/Plozz-Personal-tvOS.ipa.sha256 dist/
+          cp work/source/.build/personal/build-*/Plozz-Advanced-tvOS.ipa dist/
+          cp work/source/.build/personal/build-*/Plozz-Advanced-tvOS.ipa.sha256 dist/
           cp work/source/.build/personal/build-*/provenance.json dist/
           cp work/source/.build/personal/build-*/Package.resolved dist/
           python3 tools/stage.py
@@ -133,6 +133,6 @@ jobs:
               --title "Plozz Advanced ${UPSTREAM_TAG#release/}" --notes-file release-notes.md
           fi
           gh release upload "$RELEASE_TAG" --clobber \
-            Plozz-Personal-tvOS.ipa Plozz-Personal-tvOS.ipa.sha256 \
+            Plozz-Advanced-tvOS.ipa Plozz-Advanced-tvOS.ipa.sha256 \
             provenance.json Package.resolved SHA256SUMS Plozz-Advanced-source.tar.gz
           gh release edit "$RELEASE_TAG" --draft=false --latest
