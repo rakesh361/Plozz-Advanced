@@ -1,0 +1,138 @@
+name: Plozz Advanced
+
+on:
+  schedule:
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plozz-advanced-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.release.outputs.build }}
+      tag: ${{ steps.release.outputs.tag }}
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s tests -v
+      - name: Check for an unpublished upstream release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/check.py
+
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 90
+    outputs:
+      artifact: ${{ steps.artifact.outputs.name }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Install pinned project generator
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip \
+            --output "$RUNNER_TEMP/xcodegen.zip"
+          printf '%s  %s\n' 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806 \
+            "$RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/recipe-tools"
+          echo "$RUNNER_TEMP/recipe-tools/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: Fetch upstream and restore retained features
+        env:
+          UPSTREAM_TAG: ${{ needs.check.outputs.tag }}
+          UPSTREAM_COMMIT: ${{ needs.check.outputs.commit }}
+        run: |
+          python3 tools/materialize.py --source work/source --tag "$UPSTREAM_TAG" --commit "$UPSTREAM_COMMIT"
+          python3 -m unittest discover -s work/source/tools/personal/tests -v
+          mkdir -p dist
+          tar --exclude=.git --exclude=.build --exclude=__pycache__ \
+            -czf dist/Plozz-Advanced-source.tar.gz -C work/source .
+          python3 -c 'import os,sys; sys.path.insert(0,"tools"); from materialize import installation_build; print("PLOZZ_BUILD_NUMBER="+installation_build(os.environ["GITHUB_RUN_NUMBER"],os.environ["GITHUB_RUN_ATTEMPT"]))' >> "$GITHUB_ENV"
+      - name: Build unsigned tvOS IPA
+        run: bash work/source/tools/personal/build-tv.sh
+      - name: Test linked playback components and settings
+        env:
+          PLOZZ_LOG_DIR: ${{ github.workspace }}/work/source/.build/personal/simulator-logs
+        run: bash work/source/tools/personal/test-tv.sh
+      - name: Stage verified release files
+        id: artifact
+        run: |
+          set -euo pipefail
+          cp work/source/.build/personal/build-*/Plozz-Personal-tvOS.ipa dist/
+          cp work/source/.build/personal/build-*/Plozz-Personal-tvOS.ipa.sha256 dist/
+          cp work/source/.build/personal/build-*/provenance.json dist/
+          cp work/source/.build/personal/build-*/Package.resolved dist/
+          python3 tools/stage.py
+          echo "name=advanced-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Save diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            work/source/.build/personal/build-*/build.log
+            work/source/.build/personal/simulator-logs/
+            work/source/.build/test-results/
+          retention-days: 7
+
+  publish:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: package
+      - name: Publish tested unsigned IPA and matching source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          UPSTREAM_COMMIT: ${{ needs.check.outputs.commit }}
+          UPSTREAM_TAG: ${{ needs.check.outputs.tag }}
+          RELEASE_TAG: advanced/build-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          cd package
+          sha256sum -c SHA256SUMS
+          python3 - <<'PY'
+          import json, os
+          p = json.load(open('provenance.json'))
+          assert p['automation_commit'] == os.environ['GITHUB_SHA']
+          assert p['upstream_commit'] == os.environ['UPSTREAM_COMMIT']
+          assert p['signed'] is False and p['source_history_included'] is False
+          PY
+          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > draft-state 2>/dev/null; then
+            if [ "$(cat draft-state)" != true ]; then
+              echo 'This run is already published; published assets are never overwritten.'
+              exit 0
+            fi
+          else
+            gh release create "$RELEASE_TAG" --draft --target "$GITHUB_SHA" \
+              --title "Plozz Advanced ${UPSTREAM_TAG#release/}" --notes-file release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" --clobber \
+            Plozz-Personal-tvOS.ipa Plozz-Personal-tvOS.ipa.sha256 \
+            provenance.json Package.resolved SHA256SUMS Plozz-Advanced-source.tar.gz
+          gh release edit "$RELEASE_TAG" --draft=false --latest

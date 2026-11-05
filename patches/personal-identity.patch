@@ -1,0 +1,123 @@
+diff --git a/Sources/CoreModels/AppVersionIdentity.swift b/Sources/CoreModels/AppVersionIdentity.swift
+index 1ea060c68..cef75c894 100644
+--- a/Sources/CoreModels/AppVersionIdentity.swift
++++ b/Sources/CoreModels/AppVersionIdentity.swift
+@@ -6,10 +6,11 @@ public struct AppVersionIdentity: Equatable, Sendable {
+     public let build: String
+     public let releaseVersion: String?
+     public let developmentFeature: String?
++    private let personalReleaseBuild: String?
+ 
+     public var displayVersion: String { releaseVersion ?? marketingVersion }
+     public var displayBuild: String {
+-        developmentFeature.map { "\(build) \($0)" } ?? build
++        personalReleaseBuild ?? developmentFeature.map { "\(build) \($0)" } ?? build
+     }
+ 
+     public static var current: Self {
+@@ -24,7 +25,15 @@ public struct AppVersionIdentity: Equatable, Sendable {
+         }
+         marketingVersion = value("CFBundleShortVersionString") ?? "—"
+         build = value("CFBundleVersion") ?? "—"
+-        releaseVersion = value("PlozzReleaseID") == nil ? nil : value("PlozzReleaseVersion")
++        // Personal builds display their upstream identity while retaining a
++        // monotonically increasing CFBundleVersion for in-place installation.
++        let personalVersion = value("PlozzPersonalUpstreamVersion")
++        let personalBuild = value("PlozzPersonalUpstreamBuild")
++        let isPersonalRelease = value("CFBundleIdentifier") == "com.thatcube.Plozz.personal-advanced"
++            && personalVersion != nil && personalBuild != nil
++        personalReleaseBuild = isPersonalRelease ? personalBuild : nil
++        releaseVersion = isPersonalRelease ? personalVersion
++            : (value("PlozzReleaseID") == nil ? nil : value("PlozzReleaseVersion"))
+         developmentFeature = value("PlozzReleaseID") == nil && value("PlozzReleaseChannel") == nil
+             ? value("PlozzDevelopmentFeature") : nil
+     }
+diff --git a/Tests/CoreModelsTests/AppVersionIdentityTests.swift b/Tests/CoreModelsTests/AppVersionIdentityTests.swift
+index 81da59f52..b9ebf3d12 100644
+--- a/Tests/CoreModelsTests/AppVersionIdentityTests.swift
++++ b/Tests/CoreModelsTests/AppVersionIdentityTests.swift
+@@ -2,6 +2,40 @@ import XCTest
+ @testable import CoreModels
+ 
+ final class AppVersionIdentityTests: XCTestCase {
++    func testPersonalReleaseMatchesUpstreamWhileRetainingInstallationBuild() {
++        let identity = AppVersionIdentity(infoDictionary: [
++            "CFBundleIdentifier": "com.thatcube.Plozz.personal-advanced",
++            "CFBundleShortVersionString": "2026.10.30",
++            "CFBundleVersion": "4900.1",
++            "PlozzDevelopmentFeature": "Personal advanced",
++            "PlozzPersonalUpstreamVersion": "2026.11.3",
++            "PlozzPersonalUpstreamBuild": "69.2"
++        ])
++        XCTAssertEqual(identity.displayVersion, "2026.11.3")
++        XCTAssertEqual(identity.displayBuild, "69.2")
++        XCTAssertEqual(identity.build, "4900.1")
++        XCTAssertEqual(identity.marketingVersion, "2026.10.30")
++    }
++
++    func testPersonalMetadataCannotRelabelOfficialAppOrIncompleteBuild() {
++        for overrides in [
++            ["CFBundleIdentifier": "com.thatcube.Plozz"],
++            ["PlozzPersonalUpstreamVersion": ""],
++            ["PlozzPersonalUpstreamBuild": "$(PLOZZ_PERSONAL_UPSTREAM_BUILD)"]
++        ] {
++            let info = [
++                "CFBundleIdentifier": "com.thatcube.Plozz.personal-advanced",
++                "CFBundleShortVersionString": "2026.10.30",
++                "CFBundleVersion": "4900.1",
++                "PlozzPersonalUpstreamVersion": "2026.11.3",
++                "PlozzPersonalUpstreamBuild": "69.2"
++            ].merging(overrides) { _, override in override }
++            let identity = AppVersionIdentity(infoDictionary: info)
++            XCTAssertEqual(identity.displayVersion, "2026.10.30")
++            XCTAssertEqual(identity.displayBuild, "4900.1")
++        }
++    }
++
+     func testDevelopmentFeatureIsDisplayOnly() {
+         let identity = AppVersionIdentity(infoDictionary: [
+             "CFBundleShortVersionString": "2026.9.25",
+diff --git a/project.yml b/project.yml
+index 3b3f46d89..5470ac96a 100644
+--- a/project.yml
++++ b/project.yml
+@@ -121,6 +121,8 @@ targets:
+         PlozzReleaseID: "$(PLOZZ_RELEASE_ID)"
+         PlozzReleaseVersion: "$(PLOZZ_RELEASE_VERSION)"
+         PlozzDevelopmentFeature: "$(PLOZZ_DEV_FEATURE)"
++        PlozzPersonalUpstreamVersion: "${PLOZZ_PERSONAL_UPSTREAM_VERSION}"
++        PlozzPersonalUpstreamBuild: "${PLOZZ_PERSONAL_UPSTREAM_BUILD}"
+         # Background audio keeps music playing while the user browses other
+         # screens or the tvOS screensaver starts. Required for the music MVP's
+         # background/Now-Playing behaviour (AVAudioSession .playback).
+@@ -360,6 +362,8 @@ targets:
+         PlozzReleaseID: "$(PLOZZ_RELEASE_ID)"
+         PlozzReleaseVersion: "$(PLOZZ_RELEASE_VERSION)"
+         PlozzDevelopmentFeature: "$(PLOZZ_DEV_FEATURE)"
++        PlozzPersonalUpstreamVersion: "${PLOZZ_PERSONAL_UPSTREAM_VERSION}"
++        PlozzPersonalUpstreamBuild: "${PLOZZ_PERSONAL_UPSTREAM_BUILD}"
+         UILaunchScreen: {}
+         UIRequiresFullScreen: false
+         BGTaskSchedulerPermittedIdentifiers:
+diff --git a/tools/generate-project.sh b/tools/generate-project.sh
+index f60403473..1dab09eee 100755
+--- a/tools/generate-project.sh
++++ b/tools/generate-project.sh
+@@ -47,6 +47,8 @@ install_apple_build_lease_traps
+ # literal token, which would break the canonical bundle id.
+ export PLOZZ_ID_SUFFIX="${PLOZZ_ID_SUFFIX:-}"
+ export PLOZZ_NAME_SUFFIX="${PLOZZ_NAME_SUFFIX:-}"
++export PLOZZ_PERSONAL_UPSTREAM_VERSION="${PLOZZ_PERSONAL_UPSTREAM_VERSION:-}"
++export PLOZZ_PERSONAL_UPSTREAM_BUILD="${PLOZZ_PERSONAL_UPSTREAM_BUILD:-}"
+ export PLOZZ_PAIRING_SERVICE_TYPE="${PLOZZ_PAIRING_SERVICE_TYPE:-_plozz-pair._tcp}"
+ export PLOZZ_URL_SCHEME="${PLOZZ_URL_SCHEME:-plozz}"
+ # tvOS entitlements paths — canonical by default. A --branded build overrides
+@@ -80,6 +82,8 @@ generation_signature="$(
+     printf '%s\n' \
+       "PLOZZ_ID_SUFFIX=${PLOZZ_ID_SUFFIX}" \
+       "PLOZZ_NAME_SUFFIX=${PLOZZ_NAME_SUFFIX}" \
++      "PLOZZ_PERSONAL_UPSTREAM_VERSION=${PLOZZ_PERSONAL_UPSTREAM_VERSION}" \
++      "PLOZZ_PERSONAL_UPSTREAM_BUILD=${PLOZZ_PERSONAL_UPSTREAM_BUILD}" \
+       "PLOZZ_PAIRING_SERVICE_TYPE=${PLOZZ_PAIRING_SERVICE_TYPE}" \
+       "PLOZZ_URL_SCHEME=${PLOZZ_URL_SCHEME}" \
+       "PLOZZ_TV_APP_ENTITLEMENTS=${PLOZZ_TV_APP_ENTITLEMENTS}" \

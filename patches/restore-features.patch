@@ -1,0 +1,1933 @@
+diff --git a/NOTICE.md b/NOTICE.md
+index ef597663e..b2a2f0bab 100644
+--- a/NOTICE.md
++++ b/NOTICE.md
+@@ -27,9 +27,10 @@ embedded in the app bundle as frameworks (`AetherLibavcodec.framework`,
+ | zimg 3.0.6 (image scaling and color conversion) | bundled by FFmpegBuild | WTFPL |
+ | libzvbi 0.2.46 (teletext decoder) | bundled by FFmpegBuild; GPL sources excluded by its build recipe | LGPL-2.0-or-later, conveyed under LGPL-2.1; `ure.c` MIT |
+ | libdovi (Dolby Vision RPU parser) | `github.com/superuser404notfound/LibDovi` @ `2.1.0` | MIT |
++| LibTrueHD (decoder and object renderer) | `github.com/superuser404notfound/LibTrueHD` @ `3.1.0` | MIT / Apache-2.0 |
+ 
+ Plozz's own `Package.swift` declares **only** AetherEngine for this stack;
+-FFmpegBuild and LibDovi are its transitive dependencies (AetherEngine owns their version
++FFmpegBuild, LibDovi and LibTrueHD are its transitive dependencies (AetherEngine owns their version
+ alignment). The concrete pins live in the committed root `Package.resolved`.
+ `tools/generate-project.sh` copies that canonical lock into generated Xcode
+ projects at
+@@ -37,21 +38,17 @@ projects at
+ 
+ ## Engine linkage and LibTrueHD
+ 
+-The pinned fork exports AetherEngine dynamically to separate its decoder
+-runtime from Plozz's Objective-C/C++ unwind table. Both apps embed and sign
++The pinned fork exports AetherEngine dynamically to separate its two Rust decoder
++runtimes from Plozz's Objective-C/C++ unwind table. Both apps embed and sign
+ `AetherEngine.framework`; FFmpeg remains in separate dynamic frameworks.
+ 
+ [LibTrueHD 3.1.0](https://github.com/superuser404notfound/LibTrueHD/tree/3.1.0)
+-was linked in earlier builds. Plozz now disables the `TrueHDObjectAudio` and
+-`DTSXObjectAudio` package traits; LibTrueHD is no longer resolved or linked.
+-Ordinary channel-audio decoding remains available through FFmpeg. LibTrueHD's C API and
++is linked into the engine even when its object-audio mode is off. Its C API and
+ Apple packaging are MIT, copyright Quick104 and Vincent Herbst; the compiled
+ truehd and oamd crates are Apache-2.0, copyright Rainbaby and contributors.
+ Both apps ship its unmodified `LICENSE`, `LICENSE-APACHE` and `NOTICE` as
+ `LibTrueHDLicense.txt`, `LibTrueHDApacheLicense.txt` and `LibTrueHDNotices.txt`.
+-The shared acknowledgements page retains the library's credit and exact source
+-tag, explicitly identifying it as no longer linked. These retained notices do
+-not imply that height-channel conversion remains available.
++The shared acknowledgements page credits the library and exact source tag.
+ 
+ ## FFmpeg license facts
+ 
+diff --git a/Package.resolved b/Package.resolved
+index 92c1ccbbc..8b612fa2e 100644
+--- a/Package.resolved
++++ b/Package.resolved
+@@ -1,5 +1,5 @@
+ {
+-  "originHash" : "d2760b05e6cd40e764a18d32edc67a265471ca69f94b5361fb174a0cc4495f99",
++  "originHash" : "43d7109745c75a615b2c8b983c8c1c76aa27749fb0e011aba209b91be768a3ca",
+   "pins" : [
+     {
+       "identity" : "aetherengine",
+@@ -27,6 +27,15 @@
+         "version" : "2.1.0"
+       }
+     },
++    {
++      "identity" : "libtruehd",
++      "kind" : "remoteSourceControl",
++      "location" : "https://github.com/superuser404notfound/LibTrueHD",
++      "state" : {
++        "revision" : "73bee84d7ac7b8619db570e36490b92761fe91a6",
++        "version" : "3.1.0"
++      }
++    },
+     {
+       "identity" : "sentry-apple-binaries",
+       "kind" : "remoteSourceControl",
+diff --git a/Package.swift b/Package.swift
+index 808b89ec4..4e1f15522 100644
+--- a/Package.swift
++++ b/Package.swift
+@@ -226,7 +226,8 @@ let package = Package(
+         // life.
+         //
+         // The current fork retains that correction and exports the engine dynamically.
+-        // Height-channel conversion and FEL reconstruction are disabled.
++        // Enable production spatial conversion only.
++        // Runtime eligibility and profile choice still apply.
+         // Progressive segment delivery remains off.
+         // Both apps embed the engine framework and its dependency notices.
+         //
+@@ -238,7 +239,7 @@ let package = Package(
+         // bridge; the engine's legacy SMB URL product is not linked.
+         // 7.48.0 adds VP9 hardware decoding where available, AV1 Dolby Vision,
+         // software-path spatial audio, and bounded MPEG-DASH VOD support.
+-        // FFmpegBuild 3.11.1 is owned by the engine.
++        // FFmpegBuild 3.11.1 and LibTrueHD 3.1.x are owned by the engine.
+         // New host-controlled Now Playing and background retention remain opt-in.
+         // 7.51.0 includes route-selected lossless PCM spatial beds from 7.50.0.
+         // The fork retains Plozz's timing, subtitle, diagnostics and linkage fixes.
+@@ -251,12 +252,13 @@ let package = Package(
+             url: "https://github.com/brandomoore/AetherEngine",
+             revision: "7cd91ee1a55401d59ca385e247a5c6308b7d27ea",
+             traits: [
+-                "DolbyVisionStillReshaping",
++                "TrueHDObjectAudio", "DTSXObjectAudio",
++                "DualLayerDolbyVision", "DolbyVisionStillReshaping",
+             ]
+         ),
+         // NOTE: FFmpegBuild (FFmpeg n8.1.x media libraries) and LibDovi (Dolby Vision
+         // RPU parser) are transitive dependencies — AetherEngine declares and
+-        // consumes them. Object-audio conversion traits are intentionally disabled.
++        // consumes them, along with LibTrueHD for TrueHDObjectAudio.
+         // The retired hybrid-engine target needed
+         // direct FFmpegBuild/LibDovi declarations; current Plozz targets do not
+         // consume those products. AetherEngine owns their version alignment.
+diff --git a/README.md b/README.md
+index 038199acb..dc2b2d0e6 100644
+--- a/README.md
++++ b/README.md
+@@ -130,8 +130,10 @@ available when you want them.
+   other clients hand back to you, powered by
+   [AetherEngine](https://github.com/superuser404notfound/AetherEngine).
+   ([The full format list](https://github.com/superuser404notfound/AetherEngine/blob/main/docs/formats.md).)
+-- **Surround audio** — ordinary multichannel playback and native spatial audio
+-  from compatible streams and equipment. Height-channel conversion is not available.
++- **Spatial audio** — optional lossy conversion adds overhead sound from
++  supported tracks on tvOS 26 and compatible equipment. Other paths retain
++  compatible channel playback. Dolby Digital Plus streams keep their native
++  playback path.
+   [Compatibility details](docs/playback-engines.md#spatial-audio).
+ - **Change versions without leaving the player** — switch between files or
+   editions on the active server on Apple TV, iPhone, and iPad. Keep your
+diff --git a/Sources/AppShelliOS/PlozziOSSettingsView.swift b/Sources/AppShelliOS/PlozziOSSettingsView.swift
+index fcb89e399..c047804e1 100644
+--- a/Sources/AppShelliOS/PlozziOSSettingsView.swift
++++ b/Sources/AppShelliOS/PlozziOSSettingsView.swift
+@@ -1458,7 +1458,7 @@ private struct PlozziOSSettingsSearchDestination: View {
+         switch entry.destinationPage(on: UIDevice.current.userInterfaceIdiom == .phone ? .phone : .tablet) {
+         case .playback: profilePage(.playback)
+         case .playbackAdvanced:
+-            PlaybackAdvancedSettingsView()
++            PlaybackAdvancedSettingsView(playback: appModel.settings.playback)
+         case .streamingAdvanced:
+             if appModel.accountsProviders.resolvedActiveAccounts.contains(where: {
+                 $0.provider is any StreamingQualityProviding
+@@ -2610,8 +2610,10 @@ struct PlozziOSPlaybackSettingsView: View {
+             SettingsSectionGroup("Audio") {
+                 LosslessAudioControl()
+                     .settingsSearchAnchor("lossless-audio")
++                SpatialAudioControl(isOn: $model.settings.trueHDAtmosEnabled)
++                    .settingsSearchAnchor("spatial-audio")
+             }
+-            .settingsSearchGroup(["lossless-audio"])
++            .settingsSearchGroup(["lossless-audio", "spatial-audio"])
+             SettingsSectionGroup {
+                 Button { showsAdvancedPlayback = true } label: {
+                     SettingsDisclosureLabel { Text("Advanced") }
+@@ -2627,7 +2629,7 @@ struct PlozziOSPlaybackSettingsView: View {
+             PlozziOSAdvancedStreamingSettings(settings: $model.settings.streaming, support: streamingSupport)
+         }
+         .navigationDestination(isPresented: $showsAdvancedPlayback) {
+-            PlaybackAdvancedSettingsView()
++            PlaybackAdvancedSettingsView(playback: model)
+         }
+     }
+ 
+diff --git a/Sources/CoreModels/PlaybackModels.swift b/Sources/CoreModels/PlaybackModels.swift
+index 3749badad..77ea6a776 100644
+--- a/Sources/CoreModels/PlaybackModels.swift
++++ b/Sources/CoreModels/PlaybackModels.swift
+@@ -439,6 +439,9 @@ public struct PlaybackRequest: Hashable, Sendable {
+     /// express no preference (engine uses the container default). Not part of the
+     /// memberwise init so the many provider construction sites stay untouched.
+     public var preferredAudioLanguages: [String] = []
++    /// Profile preference, not inferred from provider metadata; unsupported paths ignore it.
++    public var trueHDAtmosEnabled: Bool = PlaybackSettings.default.trueHDAtmosEnabled
++    public var dolbyVisionFELEnabled: Bool = PlaybackSettings.default.dolbyVisionFELEnabled
+     /// Explicit provider/container stream index used only when a resolved
+     /// language cannot match because every audio track is untagged. Language
+     /// matching remains authoritative whenever tags exist; this deterministic
+diff --git a/Sources/CoreModels/PlaybackSettings.swift b/Sources/CoreModels/PlaybackSettings.swift
+index dcebe68a6..78311a1cc 100644
+--- a/Sources/CoreModels/PlaybackSettings.swift
++++ b/Sources/CoreModels/PlaybackSettings.swift
+@@ -160,6 +160,14 @@ public struct PlaybackSettings: Codable, Equatable, Sendable {
+     /// `.original`, `false` → `.device`), migrated in the decoder below.
+     public var audioLanguagePreference: AudioLanguagePreference
+ 
++    /// Spatial conversion for supported tvOS/iOS on-demand sessions. Keep the original
++    /// key so saved Off choices and transferred profile preferences survive.
++    public var trueHDAtmosEnabled: Bool
++
++    /// Experimental Profile 7 FEL reconstruction. Off by default; applies to new
++    /// on-demand sessions, retaining eligible spatial audio on OS 26 and later.
++    public var dolbyVisionFELEnabled: Bool
++
+     /// Remember the chosen **audio language** per series: switching audio on any
+     /// episode makes that language stick for every other episode of that series
+     /// (per profile). Stored by language, re-resolved to a concrete track per
+@@ -206,6 +214,8 @@ public struct PlaybackSettings: Codable, Equatable, Sendable {
+         showUpNextCard: Bool = true,
+         upNextLeadSeconds: Int = 30,
+         audioLanguagePreference: AudioLanguagePreference = .original,
++        trueHDAtmosEnabled: Bool = true,
++        dolbyVisionFELEnabled: Bool = false,
+         rememberAudioTrackPerSeries: Bool = true,
+         rememberSubtitleTrackPerSeries: Bool = true,
+         fadeOnDynamicRangeChange: Bool = true,
+@@ -243,6 +253,8 @@ public struct PlaybackSettings: Codable, Equatable, Sendable {
+         self.showUpNextCard = showUpNextCard
+         self.upNextLeadSeconds = upNextLeadSeconds
+         self.audioLanguagePreference = audioLanguagePreference
++        self.trueHDAtmosEnabled = trueHDAtmosEnabled
++        self.dolbyVisionFELEnabled = dolbyVisionFELEnabled
+         self.rememberAudioTrackPerSeries = rememberAudioTrackPerSeries
+         self.rememberSubtitleTrackPerSeries = rememberSubtitleTrackPerSeries
+         self.fadeOnDynamicRangeChange = fadeOnDynamicRangeChange
+@@ -417,6 +429,8 @@ public extension PlaybackSettings {
+         case showUpNextCard
+         case upNextLeadSeconds
+         case audioLanguagePreference
++        case trueHDAtmosEnabled
++        case dolbyVisionFELEnabled
+         /// Legacy boolean predecessor of `audioLanguagePreference`, still read for
+         /// migration (`true` → `.original`, `false` → `.device`).
+         case preferOriginalLanguageAudio
+@@ -441,7 +455,7 @@ public extension PlaybackSettings {
+     /// `resumeRewindInterval` defaults to `.five` when absent — the maintainer
+     /// wants the resume-rewind nudge on for upgrading installs too, not just fresh
+     /// ones (`.off` is available for anyone who prefers exact resume).
+-    /// Retired height-conversion and FEL preferences are ignored in older payloads.
++    /// Spatial audio defaults on when absent, while an existing Off choice survives.
+     init(from decoder: Decoder) throws {
+         let container = try decoder.container(keyedBy: CodingKeys.self)
+         let defaults = PlaybackSettings.default
+@@ -546,6 +560,12 @@ public extension PlaybackSettings {
+         } else {
+             self.audioLanguagePreference = defaults.audioLanguagePreference
+         }
++        self.trueHDAtmosEnabled =
++            (try? container.decodeIfPresent(Bool.self, forKey: .trueHDAtmosEnabled))
++            .flatMap { $0 } ?? defaults.trueHDAtmosEnabled
++        self.dolbyVisionFELEnabled =
++            (try? container.decodeIfPresent(Bool.self, forKey: .dolbyVisionFELEnabled))
++            .flatMap { $0 } ?? defaults.dolbyVisionFELEnabled
+         self.rememberAudioTrackPerSeries =
+             (try? container.decodeIfPresent(Bool.self, forKey: .rememberAudioTrackPerSeries))
+             .flatMap { $0 } ?? defaults.rememberAudioTrackPerSeries
+@@ -604,6 +624,8 @@ public extension PlaybackSettings {
+         try container.encode(showUpNextCard, forKey: .showUpNextCard)
+         try container.encode(upNextLeadSeconds, forKey: .upNextLeadSeconds)
+         try container.encode(audioLanguagePreference, forKey: .audioLanguagePreference)
++        try container.encode(trueHDAtmosEnabled, forKey: .trueHDAtmosEnabled)
++        try container.encode(dolbyVisionFELEnabled, forKey: .dolbyVisionFELEnabled)
+         try container.encode(rememberAudioTrackPerSeries, forKey: .rememberAudioTrackPerSeries)
+         try container.encode(rememberSubtitleTrackPerSeries, forKey: .rememberSubtitleTrackPerSeries)
+         try container.encode(fadeOnDynamicRangeChange, forKey: .fadeOnDynamicRangeChange)
+diff --git a/Sources/CoreModels/PlozzAttributions.swift b/Sources/CoreModels/PlozzAttributions.swift
+index 7d42ed36a..beb4b845b 100644
+--- a/Sources/CoreModels/PlozzAttributions.swift
++++ b/Sources/CoreModels/PlozzAttributions.swift
+@@ -102,8 +102,7 @@ public enum PlozzAttributions {
+         PlozzAttribution(
+             title: "LibTrueHD",
+             detail:
+-                "LibTrueHD 3.1.0 supported optional spatial audio rendering in earlier builds "
+-                + "and is not linked in this build. "
++                "TrueHD decoding and optional spatial audio rendering use LibTrueHD 3.1.0. "
+                 + "By Quick104 and "
+                 + "Vincent Herbst, using truehdd and oamd by Rainbaby and contributors. "
+                 + "Source: https://github.com/superuser404notfound/LibTrueHD/tree/3.1.0. "
+diff --git a/Sources/CoreModels/ProfileSettingsSnapshot.swift b/Sources/CoreModels/ProfileSettingsSnapshot.swift
+index 48a1fe146..a7da55339 100644
+--- a/Sources/CoreModels/ProfileSettingsSnapshot.swift
++++ b/Sources/CoreModels/ProfileSettingsSnapshot.swift
+@@ -39,7 +39,7 @@ public enum ProfileSettingsTransfer {
+     ///  - `com.plozz.deviceExternalPlayer` (shared by viewers on this device only)
+     ///  - `com.plozz.deviceTopShelf` (shared Top Shelf preferences on this Apple TV only)
+     ///  - `com.plozz.losslessSurround` (connected audio setup, shared by viewers on this device)
+-    ///  - `com.plozz.spatialAudioLayout` (retired device-local rendering layout)
++    ///  - `com.plozz.spatialAudioLayout` (rendering layout for this device's audio setup)
+     public static let transferableBaseKeys: [String] = [
+         "com.plozz.appTheme",
+         ThemeSettingsStore.gradientStorageKey,
+diff --git a/Sources/CoreModels/SettingsSearch.swift b/Sources/CoreModels/SettingsSearch.swift
+index 1f1914ccc..0cdd279ca 100644
+--- a/Sources/CoreModels/SettingsSearch.swift
++++ b/Sources/CoreModels/SettingsSearch.swift
+@@ -419,6 +419,8 @@ public enum SettingsSearchCatalog {
+               keywords: "remember sound track language episodes"),
+         .init("lossless-audio", page: .playback, title: "Prefer lossless audio",
+               keywords: "sound surround compressed HDMI ARC receiver audio compatibility"),
++        .init("spatial-audio", page: .playback, title: "Spatial audio",
++              keywords: "surround height overhead speakers immersive sound", minimumOSVersion: 26),
+         .init("read-ahead", page: .playback, title: "Video buffer",
+               keywords: "buffering streaming cache ahead slow network stuttering loading memory"),
+         .init("live-buffer", page: .playback, title: "Live TV buffer",
+diff --git a/Sources/CoreModels/SettingsSearchAdditionalEntries.swift b/Sources/CoreModels/SettingsSearchAdditionalEntries.swift
+index ae798e72b..e3026e227 100644
+--- a/Sources/CoreModels/SettingsSearchAdditionalEntries.swift
++++ b/Sources/CoreModels/SettingsSearchAdditionalEntries.swift
+@@ -76,6 +76,10 @@ extension SettingsSearchCatalog {
+               keywords: "streaming quality transcoding bandwidth bitrate resolution", platform: .mobile),
+         .init("quality-force", page: .streamingAdvanced, title: "Force transcoding",
+               keywords: "streaming quality transcoding bandwidth bitrate resolution", platform: .mobile),
++        .init("dolby-fel", page: .playbackAdvanced, title: "Dolby Vision FEL (experimental)",
++              keywords: "playback advanced audio video"),
++        .init("spatial-layout", page: .playbackAdvanced, title: "Rendering layout",
++              keywords: "playback advanced audio video", minimumOSVersion: 26),
+         .init("external-player", page: .externalPlayer, title: "Default player",
+               keywords: "external player open default custom URL template"),
+         .init("external-template", page: .externalPlayer, title: "Player URL template",
+diff --git a/Sources/CoreModels/SpatialAudioLayout.swift b/Sources/CoreModels/SpatialAudioLayout.swift
+index b934aa715..1491c37c1 100644
+--- a/Sources/CoreModels/SpatialAudioLayout.swift
++++ b/Sources/CoreModels/SpatialAudioLayout.swift
+@@ -15,7 +15,6 @@ public enum SpatialAudioLayout: String, CaseIterable, Codable, Sendable {
+     }
+ }
+ 
+-/// Legacy device preference; playback no longer reads it.
+ public struct SpatialAudioLayoutStore {
+     public static let storageKey = "com.plozz.spatialAudioLayout"
+     private static let logger = Logger(subsystem: "com.plozz.app", category: "settings")
+diff --git a/Sources/EnginePlozzigen/PlozzigenVideoEngine.swift b/Sources/EnginePlozzigen/PlozzigenVideoEngine.swift
+index 180ab7fd2..01791af66 100644
+--- a/Sources/EnginePlozzigen/PlozzigenVideoEngine.swift
++++ b/Sources/EnginePlozzigen/PlozzigenVideoEngine.swift
+@@ -386,6 +386,7 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+     private let readAheadPreference: @MainActor () -> PlaybackReadAhead
+     private let liveBufferPreference: @MainActor () -> LivePlaybackBuffer
+     private let losslessAudioPreference: @MainActor () -> Bool
++    private let spatialAudioLayoutPreference: @MainActor () -> SpatialAudioLayout
+     private var liveOutputPolicy = LiveChannelOutputPolicy()
+     private var outputPolicyReload: Task<Void, Never>?
+     private var outputLoadGeneration = UUID()
+@@ -417,7 +418,8 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+         authenticatedHTTPResolver: (any AuthenticatedHTTPResourceResolving)? = nil,
+         readAheadPreference: @escaping @MainActor () -> PlaybackReadAhead = { .default },
+         liveBufferPreference: @escaping @MainActor () -> LivePlaybackBuffer = { .default },
+-        losslessAudioPreference: @escaping @MainActor () -> Bool = { LosslessAudioSettingsStore().load() }
++        losslessAudioPreference: @escaping @MainActor () -> Bool = { LosslessAudioSettingsStore().load() },
++        spatialAudioLayoutPreference: @escaping @MainActor () -> SpatialAudioLayout = { SpatialAudioLayoutStore().load() }
+     ) throws {
+         self.engine = try AEEngine()
+         // Plozz owns its audio session, and on an E-AC-3/Atmos bitstream-passthrough route the HDMI sink
+@@ -430,6 +432,7 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+         self.readAheadPreference = readAheadPreference
+         self.liveBufferPreference = liveBufferPreference
+         self.losslessAudioPreference = losslessAudioPreference
++        self.spatialAudioLayoutPreference = spatialAudioLayoutPreference
+         #if canImport(UIKit)
+         let surface = AetherPlayerView()
+         engine.bind(view: surface)
+@@ -882,6 +885,9 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+         }
+         let options = Self.onDemandLoadOptions(
+             losslessAudioEnabled: losslessAudioPreference(),
++            trueHDAtmosEnabled: request.trueHDAtmosEnabled,
++            spatialAudioLayout: spatialAudioLayoutPreference(),
++            dolbyVisionFELEnabled: request.dolbyVisionFELEnabled,
+             outputPolicy: outputPolicy,
+             readAhead: isLocalFile || request.suppressOrdinaryWatchReporting
+                 ? .default : readAheadPreference()
+@@ -891,6 +897,9 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+ 
+     nonisolated static func onDemandLoadOptions(
+         losslessAudioEnabled: Bool = LosslessAudioSettingsStore.defaultEnabled,
++        trueHDAtmosEnabled: Bool = PlaybackSettings.default.trueHDAtmosEnabled,
++        spatialAudioLayout: SpatialAudioLayout = .default,
++        dolbyVisionFELEnabled: Bool = PlaybackSettings.default.dolbyVisionFELEnabled,
+         outputPolicy: LiveChannelOutputPolicy = .init(),
+         readAhead: PlaybackReadAhead = .default
+     ) -> LoadOptions {
+@@ -899,7 +908,9 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+             audioBridgeMode: losslessAudioEnabled ? .lossless : .surroundCompat
+         )
+         options.objectAudioRendering = .off
+-        options.preferDualLayerDolbyVision = false
++        options.preferDualLayerDolbyVision = dolbyVisionFELEnabled
++            && outputPolicy.isAudible && !outputPolicy.sharesAudioSession
++            && !outputPolicy.suppressesDisplayMatching
+         // Aether uses approximately four-second segments and clamps the maximum
+         // to 2,700, retaining its free-space budget and producer backpressure.
+         switch readAhead {
+@@ -912,10 +923,28 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+         // Explicit durations may exceed the automatic 2 GiB cap. The engine still
+         // clamps this request to its available-space limit and shared retention ledger.
+         options.sessionCacheByteBudget = readAhead == .automatic ? nil : Int.max
++        #if os(tvOS) || os(iOS)
++        if #available(tvOS 26.0, iOS 26.0, *), trueHDAtmosEnabled,
++           outputPolicy.isAudible, !outputPolicy.sharesAudioSession {
++            // This is the rendering bed, not detected speakers. Aether chooses PCM
++            // or APAC for the route and retains its source/channel fallback.
++            options.objectAudioRendering = .render(spatialSpeakerLayout(spatialAudioLayout))
++        }
++        #endif
+         applyLiveOutputPolicy(outputPolicy, to: &options)
+         return options
+     }
+ 
++    nonisolated static func spatialSpeakerLayout(_ layout: SpatialAudioLayout) -> SpatialSpeakerLayout {
++        switch layout {
++        case .fiveOneTwo: .l512
++        case .fiveOneFour: .l514
++        case .sevenOneTwo: .l712
++        case .sevenOneFour: .l714
++        case .nineOneSix: .l916
++        }
++    }
++
+     func liveLoadOptions(
+         httpHeaders: [String: String], url: URL? = nil,
+         sourceFormat: PlozzigenLiveSourceProbe.Format? = nil
+diff --git a/Sources/FeaturePlayback/PlayerViewModel.swift b/Sources/FeaturePlayback/PlayerViewModel.swift
+index cbfd49ecb..7a15ca343 100644
+--- a/Sources/FeaturePlayback/PlayerViewModel.swift
++++ b/Sources/FeaturePlayback/PlayerViewModel.swift
+@@ -1807,6 +1807,8 @@ public final class PlayerViewModel {
+     ) async {
+         endTemporarySpeedBoost()
+         var request = request
++        request.trueHDAtmosEnabled = playbackSettings.trueHDAtmosEnabled
++        request.dolbyVisionFELEnabled = playbackSettings.dolbyVisionFELEnabled
+         dynamicRangeLoadGeneration &+= 1
+         let rangeLoadGeneration = dynamicRangeLoadGeneration
+         controls.infoCard.chapters = MediaChapter.normalized(request.chapters, duration: request.item.runtime)
+diff --git a/Sources/FeaturePlayback/README.md b/Sources/FeaturePlayback/README.md
+index 4fd6a660d..5dd345214 100644
+--- a/Sources/FeaturePlayback/README.md
++++ b/Sources/FeaturePlayback/README.md
+@@ -994,19 +994,23 @@ step, not the original recording's fidelity, resampling/downmixing, or the
+ receiver's final output. In particular, stream-copy of a lossy source is not
+ labelled lossless. The same shared rows follow live pipeline changes on both
+ platforms, without changing audio selection or conversion behavior.
+-Height-channel conversion and experimental Dolby Vision FEL reconstruction are
+-disabled in load options and excluded by engine package traits. Their controls,
+-search results and request fields are removed; legacy saved profile values are
+-ignored. Ordinary surround audio, standard Dolby Vision playback and native
+-E-AC-3/JOC stream-copy remain unchanged. Software playback uses channel PCM.
+-Diagnostic parsing still recognizes historical rendered-PCM and APAC labels;
+-those labels do not imply that Plozz enables the corresponding conversion.
++On tvOS and iOS/iPadOS 26+, the profile's default-on **Spatial audio** choice requests a
++device-selected intermediate bed for supported on-demand playback. It defaults
++to 9.1.6; Playback > Advanced offers all five engine layouts. The engine chooses
++24-bit PCM at load, or lossy APAC over AirPlay. Diagnostics label the actual
++rendered PCM pipeline **Rendered to PCM**, distinct from ordinary **Decoded to PCM**.
++This is not a speaker inventory or bitstream passthrough. DTS:X heights require
++7.1.4 or 9.1.6; other layouts retain channel playback. Saved Off choices survive.
++`PlayerViewModel` captures the active preference for initial and handoff loads;
++live streams, shared players, muted previews and unsupported OS versions stay off.
++The engine owns source eligibility and fallback. On these supported platforms,
++software/FEL playback can use the same spatial-audio choice; older OS versions keep channel PCM.
+ Both native and Plozzigen engines declare multichannel content to the audio session.
+ Compatible AirPods use Apple's spatial rendering and head-tracking preferences;
+ Plozz does not force either setting or require an AirPods-specific toggle.
+ Stream-copy and software-decoding routes retain the engine's own labels.
+-If an engine reports compressed E-AC-3/JOC, its label is **No re-encoding**,
+-not inferred from the source badge or mislabeled as PCM.
++The software route's compressed E-AC-3/JOC renderer is also **No re-encoding**;
++it is not mislabeled as PCM or inferred from the source badge.
+ The row is unknown until the engine publishes a pipeline and follows track
+ changes, fallbacks, and teardown. Do not infer it from the Atmos source badge,
+ channel count or requested bridge mode, or parse the label to make
+diff --git a/Sources/FeatureSettings/ExternalPlayerSettingsView.swift b/Sources/FeatureSettings/ExternalPlayerSettingsView.swift
+index 7b0edc36e..413b093af 100644
+--- a/Sources/FeatureSettings/ExternalPlayerSettingsView.swift
++++ b/Sources/FeatureSettings/ExternalPlayerSettingsView.swift
+@@ -4,16 +4,28 @@ import SwiftUI
+ import UIKit
+ 
+ public struct PlaybackAdvancedSettingsView: View {
++    @Bindable var playback: PlaybackSettingsModel
+     @Bindable var model: ExternalPlayerSettingsModel
+     @State private var showsExternalPlayer = false
++    @Environment(SettingsSearchRequest.self) private var searchRequest: SettingsSearchRequest?
+ 
+-    public init(model: ExternalPlayerSettingsModel = .shared) {
++    public init(playback: PlaybackSettingsModel, model: ExternalPlayerSettingsModel = .shared) {
++        self.playback = playback
+         self.model = model
+     }
+ 
+     public var body: some View {
+         #if os(tvOS)
+-        SettingsSplitLayout(title: "Advanced", rows: Self.rows(model: model))
++        if let target = searchRequest?.targetID, ["dolby-fel", "spatial-layout"].contains(target) {
++            SettingsFormLayout(
++                title: Text("Advanced"),
++                rows: Self.rows(playback: playback, model: model).filter {
++                    $0.id == (target == "dolby-fel" ? "dolby-vision-fel" : "spatial-audio-layout")
++                }, showsBack: true
++            )
++        } else {
++            SettingsSplitLayout(title: "Advanced", rows: Self.rows(playback: playback, model: model))
++        }
+         #else
+         List {
+             SettingsSectionGroup {
+@@ -21,6 +33,14 @@ public struct PlaybackAdvancedSettingsView: View {
+                     SettingsDisclosureLabel { Text("External player") }
+                 }
+             }
++            SettingsSectionGroup {
++                DolbyVisionFELControl(isOn: $playback.settings.dolbyVisionFELEnabled)
++            }
++            if #available(iOS 26.0, *) {
++                SettingsSectionGroup {
++                    SpatialAudioLayoutControl()
++                }
++            }
+         }
+         .settingsPageSurface()
+         .navigationTitle("Advanced")
+@@ -30,8 +50,48 @@ public struct PlaybackAdvancedSettingsView: View {
+         #endif
+     }
+ 
+-    static func rows(model: ExternalPlayerSettingsModel = .shared) -> [SettingsSplitRow] {
+-        ExternalPlayerSettingsRows.advanced(model: model)
++    static func rows(
++        playback: PlaybackSettingsModel, model: ExternalPlayerSettingsModel = .shared
++    ) -> [SettingsSplitRow] {
++        var rows = ExternalPlayerSettingsRows.advanced(model: model) + [
++            SettingsSplitRow(id: "dolby-vision-fel", title: "Video") {
++                DolbyVisionFELControl(isOn: Binding(
++                    get: { playback.settings.dolbyVisionFELEnabled },
++                    set: { playback.settings.dolbyVisionFELEnabled = $0 }
++                ))
++            }
++        ]
++        #if os(tvOS)
++        if #available(tvOS 26.0, *) {
++            rows.append(SettingsSplitRow(id: "spatial-audio-layout", title: "Audio") {
++                SpatialAudioLayoutControl()
++            })
++        }
++        #endif
++        return rows
++    }
++}
++
++private struct DolbyVisionFELControl: View {
++    @Binding var isOn: Bool
++
++    private var helperText: LocalizedStringResource {
++        #if os(tvOS) || os(iOS)
++        if #available(tvOS 26.0, iOS 26.0, *) {
++            return "May impact performance."
++        }
++        #endif
++        return "May impact performance. Disables spatial audio."
++    }
++
++    var body: some View {
++        SettingsControlRows {
++            Toggle("Dolby Vision FEL (experimental)", isOn: $isOn)
++                .accessibilityIdentifier("playback-dolby-vision-fel").settingsSearchAnchor("dolby-fel")
++            Text(helperText)
++                .settingsHelperText()
++                .fixedSize(horizontal: false, vertical: true)
++        }
+     }
+ }
+ 
+diff --git a/Sources/FeatureSettings/PreferenceDetailViews.swift b/Sources/FeatureSettings/PreferenceDetailViews.swift
+index 7a91941e1..1344122de 100644
+--- a/Sources/FeatureSettings/PreferenceDetailViews.swift
++++ b/Sources/FeatureSettings/PreferenceDetailViews.swift
+@@ -700,7 +700,7 @@ struct PlaybackDetailView: View {
+ 
+     private var advancedRows: [SettingsSplitRow] {
+         [.page(id: "playback-advanced", title: "Advanced") {
+-            PlaybackAdvancedSettingsView.rows()
++            PlaybackAdvancedSettingsView.rows(playback: playback)
+         }]
+     }
+ 
+@@ -887,6 +887,8 @@ struct PlaybackDetailView: View {
+                 SettingsControlRows {
+                     LosslessAudioControl()
+                         .settingsSearchAnchor("lossless-audio")
++                    SpatialAudioControl(isOn: $playback.settings.trueHDAtmosEnabled)
++                        .settingsSearchAnchor("spatial-audio")
+                 }
+             }
+         ]
+diff --git a/Sources/FeatureSettings/README.md b/Sources/FeatureSettings/README.md
+index 22bd3c855..25b5029d0 100644
+--- a/Sources/FeatureSettings/README.md
++++ b/Sources/FeatureSettings/README.md
+@@ -249,7 +249,7 @@ Playback's **Prefer lossless audio** toggle uses one short helper:
+ **Turn off for surround sound over regular HDMI ARC, which requires compressed audio.**
+ It defaults on for new and upgrading devices and is shared by Plozz
+ profiles on that device, not synced to other audio setups. Off selects the
+-ordinary compatibility-surround bridge. Height-channel conversion is disabled.
++ordinary compatibility-surround bridge; the spatial-height setting is separate.
+ 
+ Title navigation uses native page opening and closing. The former
+ **Zoom when opening titles** setting is removed, and saved values are ignored.
+@@ -330,16 +330,24 @@ with schematic Home Screen previews. A slightly larger solid-white tile marks
+ the focused app, without an icon. Posters stays the default; full-screen explains
+ tvOS's swipe-up expansion and retains the same two item limits.
+ 
+-Playback > Advanced retains the device-wide external-player choice on TV,
+-iPhone and iPad. The experimental Dolby Vision FEL control is removed, and the
+-engine's dual-layer reconstruction component is disabled. Old saved or transferred
+-FEL preferences are ignored; normal Dolby Vision playback remains unchanged.
++Playback > Advanced also contains **Dolby Vision FEL (experimental)** on TV,
++iPhone and iPad. This is a profile-scoped, default-off preference, unlike the
++device-wide external-player choice. It applies to new built-in on-demand sessions
++and travels through profile settings transfer. Its short helper warns that it
++may impact performance. On iOS/iPadOS and tvOS before 26 it also warns that
++FEL disables spatial audio; ordinary channel audio still plays. On OS 26+,
++eligible FEL tracks can retain spatial audio when the Spatial audio setting is on.
++Live playback, shared players and muted previews do not opt in.
+ See [playback engines](../../docs/playback-engines.md#dolby-vision-fel) for eligibility
+ and output limits.
+ 
+-The former height-channel switch and **Rendering layout** picker are also removed,
+-including their Settings search results. Legacy profile flags and device layout
+-values cannot enable conversion.
++On tvOS and iOS/iPadOS 26+, Playback > Advanced also offers **Rendering layout** in a native
++menu: 5.1.2, 5.1.4, 7.1.2, 7.1.4 and the default 9.1.6. This device-local choice
++is shared by profiles, excluded from profile transfer and read on each new load.
++It does not enable Spatial audio or alter saved On/Off choices. The helper
++discloses that DTS:X heights require 7.1.4 or 9.1.6; smaller layouts retain
++ordinary channel playback for those tracks. This is a rendering bed, not a
++speaker-detection setting.
+ 
+ **Remember audio language per series** stores only the selected language, not a
+ specific audio track or format. Its label needs no explanatory footer.
+@@ -347,8 +355,8 @@ specific audio track or format. Its label needs no explanatory footer.
+ On TV, related control groups can share one section heading through
+ `SettingsConnectedControlGroups`: an 8pt gap and tighter 8pt facing corners keep
+ them connected, while the section's outer corners retain the standard radius.
+-Audio language controls share the first group; Prefer lossless audio occupies
+-the second, retaining its device-local preference and helper.
++Audio language controls share the first group; Prefer lossless audio and Spatial
++audio share the second, retaining their independent preferences and helpers.
+ Autoplay switches share a group, separate from the Up Next card and its
+ conditional timing control. These use the existing surfaces and native controls,
+ without an enclosing card or changing the independent settings.
+@@ -385,13 +393,20 @@ profile-scoped and travel through settings transfer. Community-marker attributio
+ and identifier sharing appear as a short caption attached to its switch, without
+ a separate section footer.
+ 
+-Height-channel conversion is disabled in both the adapter and the engine's
+-package traits. Older `trueHDAtmosEnabled` values are ignored when decoding
+-profile preferences and omitted on the next save; other preferences and profile
+-transfers remain intact. Ordinary surround audio and directly compatible native
+-spatial audio remain available. Plozz does not override the OS's Spatial Audio
+-or head-tracking preferences. Track metadata, diagnostics and legal notices
+-retain accurate format and dependency names.
++The **Spatial audio (height channel support)** switch is available on tvOS and iOS/iPadOS 26 and later. Its
++profile-scoped `trueHDAtmosEnabled` preference defaults on, preserves saved Off
++choices and travels through profile transfer. It applies to new supported
++on-demand sessions, not live streams, shared players or muted previews. The
++helper identifies TrueHD Atmos and DTS:X as inputs, PCM rendering and lossy
++AirPlay output. Format names describe compatibility, not certification,
++lossless passthrough, or patent clearance.
++FEL can use the same spatial conversion on these platforms; source eligibility and
++fallback remain engine-owned. Unsupported platforms
++keep ordinary channel playback; directly compatible spatial audio is unaffected.
++Compatible AirPods use the system's spatial rendering automatically when enabled
++in the OS; Plozz does not override Spatial Audio or head-tracking preferences.
++Feature descriptions use neutral spatial-audio wording; track
++metadata, diagnostics and legal notices retain accurate format and dependency names.
+ See [spatial audio](../../docs/playback-engines.md#spatial-audio) for limitations.
+ 
+ Playback > Advanced > External player is a device-only, default-off preference
+diff --git a/Sources/FeatureSettings/SettingsView.swift b/Sources/FeatureSettings/SettingsView.swift
+index 01473a82d..752491ad3 100644
+--- a/Sources/FeatureSettings/SettingsView.swift
++++ b/Sources/FeatureSettings/SettingsView.swift
+@@ -893,7 +893,7 @@ public struct SettingsView: View {
+                 searchPageID: page == .theme ? "theme" : "cards"
+             )
+         case .playback: authorizedDestination(for: .playback)
+-        case .playbackAdvanced: PlaybackAdvancedSettingsView()
++        case .playbackAdvanced: PlaybackAdvancedSettingsView(playback: playback)
+         case .externalPlayer: ExternalPlayerSettingsView(custom: entry.id == "external-template")
+         case .skipMarkers:
+             SkipMarkerSettingsView(model: playback, initialKind: entry.skipKind, initialCategory: entry.contentCategory)
+diff --git a/Sources/FeatureSettings/SpatialAudioControl.swift b/Sources/FeatureSettings/SpatialAudioControl.swift
+new file mode 100644
+index 000000000..36949479b
+--- /dev/null
++++ b/Sources/FeatureSettings/SpatialAudioControl.swift
+@@ -0,0 +1,24 @@
++import CoreUI
++import SwiftUI
++
++public struct SpatialAudioControl: View {
++    @Binding private var isOn: Bool
++
++    public init(isOn: Binding<Bool>) {
++        _isOn = isOn
++    }
++
++    public var body: some View {
++        #if os(tvOS) || os(iOS)
++        if #available(tvOS 26.0, iOS 26.0, *) {
++            VStack(alignment: .leading, spacing: 8) {
++                Toggle("Spatial audio (height channel support)", isOn: $isOn)
++                    .accessibilityIdentifier("spatial-audio-toggle")
++                Text("Uses PCM for supported TrueHD Atmos and DTS:X tracks; lossy audio over AirPlay.")
++                    .settingsHelperText()
++                    .fixedSize(horizontal: false, vertical: true)
++            }
++        }
++        #endif
++    }
++}
+diff --git a/Sources/FeatureSettings/SpatialAudioLayoutControl.swift b/Sources/FeatureSettings/SpatialAudioLayoutControl.swift
+new file mode 100644
+index 000000000..6e40ea3f9
+--- /dev/null
++++ b/Sources/FeatureSettings/SpatialAudioLayoutControl.swift
+@@ -0,0 +1,36 @@
++import CoreModels
++import CoreUI
++import SwiftUI
++
++struct SpatialAudioLayoutControl: View {
++    @AppStorage private var layout: SpatialAudioLayout
++
++    init(defaults: UserDefaults = .standard) {
++        _layout = AppStorage(
++            wrappedValue: .default, SpatialAudioLayoutStore.storageKey, store: defaults
++        )
++    }
++
++    var body: some View {
++        SettingsControlRows {
++            SettingsMenuRow(title: "Rendering layout", value: Text(verbatim: layout.rawValue)) {
++                Picker("Rendering layout", selection: $layout) {
++                    ForEach(SpatialAudioLayout.allCases, id: \.self) { option in
++                        optionTitle(option).tag(option)
++                    }
++                }
++            }
++            .accessibilityIdentifier("spatial-audio-layout")
++            .settingsSearchAnchor("spatial-layout")
++            Text("Used when Spatial audio is on. Applies to this device.")
++                .settingsHelperText()
++            Text("DTS:X heights require 7.1.4 or 9.1.6.")
++                .settingsHelperText()
++        }
++    }
++
++    private func optionTitle(_ option: SpatialAudioLayout) -> Text {
++        if option == .default { return Text("\(option.rawValue) (Default)") }
++        return Text(verbatim: option.rawValue)
++    }
++}
+diff --git a/Tests/CoreModelsTests/DolbyVisionFELSettingsTests.swift b/Tests/CoreModelsTests/DolbyVisionFELSettingsTests.swift
+index 9cb85308e..49f9e4860 100644
+--- a/Tests/CoreModelsTests/DolbyVisionFELSettingsTests.swift
++++ b/Tests/CoreModelsTests/DolbyVisionFELSettingsTests.swift
+@@ -2,31 +2,24 @@ import XCTest
+ @testable import CoreModels
+ 
+ final class DolbyVisionFELSettingsTests: XCTestCase {
+-    func testRetiredFELPreferenceIsIgnoredAndNotWrittenBack() throws {
++    func testDefaultAndOlderPayloadsKeepFELDisabled() throws {
++        XCTAssertFalse(PlaybackSettings.default.dolbyVisionFELEnabled)
+         for payload in [
+             #"{}"#,
+-            #"{"dolbyVisionFELEnabled":true}"#,
+-            #"{"dolbyVisionFELEnabled":false}"#,
+             #"{"dolbyVisionFELEnabled":null}"#,
+             #"{"dolbyVisionFELEnabled":"unknown"}"#
+         ] {
+             let settings = try JSONDecoder().decode(PlaybackSettings.self, from: Data(payload.utf8))
+-            XCTAssertEqual(settings, .default)
+-            let encoded = try XCTUnwrap(
+-                JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any]
+-            )
+-            XCTAssertNil(encoded["dolbyVisionFELEnabled"])
++            XCTAssertFalse(settings.dolbyVisionFELEnabled)
+         }
+     }
+ 
+-    func testLegacyFELChoicesDoNotChangeOtherPlaybackPreferences() throws {
++    func testFELChoicesRoundTripWithoutChangingOtherAudioPreferences() throws {
+         for enabled in [false, true] {
+-            let settings = try JSONDecoder().decode(
+-                PlaybackSettings.self, from: Data("""
+-                {"dolbyVisionFELEnabled":\(enabled),"rememberAudioTrackPerSeries":false}
+-                """.utf8)
++            let settings = PlaybackSettings(
++                audioLanguagePreference: .language("ja"),
++                dolbyVisionFELEnabled: enabled
+             )
+-            XCTAssertEqual(settings, PlaybackSettings(rememberAudioTrackPerSeries: false))
+             XCTAssertEqual(
+                 try JSONDecoder().decode(PlaybackSettings.self, from: JSONEncoder().encode(settings)),
+                 settings
+@@ -35,31 +28,28 @@ final class DolbyVisionFELSettingsTests: XCTestCase {
+     }
+ 
+     @MainActor
+-    func testLegacyProfileTransferCannotRestoreFELAndPreservesOtherChoices() throws {
++    func testBindingRestoresAndTransfersOnlyTheSelectedProfilesChoice() throws {
+         let suite = "DolbyVisionFELSettingsTests-\(UUID().uuidString)"
+         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+         defer { defaults.removePersistentDomain(forName: suite) }
+         let primaryStore = PlaybackSettingsStore(defaults: defaults)
+         let guestStore = PlaybackSettingsStore(defaults: defaults, namespace: "guest")
+-        let guestKey = SettingsKey.scoped("com.plozz.playbackSettings", namespace: "guest")
+-        defaults.set(Data("""
+-        {"dolbyVisionFELEnabled":true,"rememberAudioTrackPerSeries":false}
+-        """.utf8), forKey: guestKey)
+         let guest = PlaybackSettingsModel(store: guestStore)
+-        let expected = PlaybackSettings(rememberAudioTrackPerSeries: false)
+-        XCTAssertEqual(PlaybackSettingsModel(store: primaryStore).settings, .default)
+-        XCTAssertEqual(guest.settings, expected)
++        guest.settings.dolbyVisionFELEnabled = true
++
++        XCTAssertFalse(PlaybackSettingsModel(store: primaryStore).settings.dolbyVisionFELEnabled)
++        XCTAssertTrue(PlaybackSettingsModel(store: guestStore).settings.dolbyVisionFELEnabled)
++        XCTAssertTrue(guestStore.load().rememberAudioTrackPerSeries)
+ 
+         let snapshot = ProfileSettingsTransfer.capture(namespace: "guest", defaults: defaults)
+         ProfileSettingsTransfer.apply(snapshot, namespace: "restored", defaults: defaults)
+-        let restoredStore = PlaybackSettingsStore(defaults: defaults, namespace: "restored")
+-        XCTAssertEqual(restoredStore.load(), expected)
+-        guest.settings.audioLanguagePreference = .language("ja")
+-        XCTAssertEqual(guestStore.load().audioLanguagePreference, .language("ja"))
+-        XCTAssertEqual(restoredStore.load(), expected)
+-        let saved = try XCTUnwrap(
+-            JSONSerialization.jsonObject(with: XCTUnwrap(defaults.data(forKey: guestKey))) as? [String: Any]
++        XCTAssertTrue(
++            PlaybackSettingsStore(defaults: defaults, namespace: "restored").load().dolbyVisionFELEnabled
++        )
++        guest.settings.dolbyVisionFELEnabled = false
++        XCTAssertFalse(guestStore.load().dolbyVisionFELEnabled)
++        XCTAssertTrue(
++            PlaybackSettingsStore(defaults: defaults, namespace: "restored").load().dolbyVisionFELEnabled
+         )
+-        XCTAssertNil(saved["dolbyVisionFELEnabled"])
+     }
+ }
+diff --git a/Tests/CoreModelsTests/LosslessAudioSettingsTests.swift b/Tests/CoreModelsTests/LosslessAudioSettingsTests.swift
+index 8305baa07..b4f83fe6e 100644
+--- a/Tests/CoreModelsTests/LosslessAudioSettingsTests.swift
++++ b/Tests/CoreModelsTests/LosslessAudioSettingsTests.swift
+@@ -6,9 +6,11 @@ final class LosslessAudioSettingsTests: XCTestCase {
+         try withDefaults { defaults in
+             for namespace: String? in [nil, "guest"] {
+                 let profile = PlaybackSettingsStore(defaults: defaults, namespace: namespace)
+-                profile.save(.default)
++                var settings = PlaybackSettings.default
++                settings.trueHDAtmosEnabled = false
++                profile.save(settings)
+                 XCTAssertTrue(LosslessAudioSettingsStore(defaults: defaults).load())
+-                XCTAssertEqual(profile.load(), .default)
++                XCTAssertFalse(profile.load().trueHDAtmosEnabled)
+                 XCTAssertNil(defaults.object(forKey: LosslessAudioSettingsStore.storageKey))
+             }
+         }
+diff --git a/Tests/CoreModelsTests/SettingsSearchTests.swift b/Tests/CoreModelsTests/SettingsSearchTests.swift
+index 47e979f50..a34af9624 100644
+--- a/Tests/CoreModelsTests/SettingsSearchTests.swift
++++ b/Tests/CoreModelsTests/SettingsSearchTests.swift
+@@ -200,8 +200,11 @@ final class SettingsSearchTests: XCTestCase {
+                 XCTAssertFalse(entry.isAvailable(on: platform, osVersion: 27, isKids: true), entry.id)
+             }
+         }
+-        for id in ["spatial-audio", "spatial-layout", "dolby-fel"] {
+-            XCTAssertNil(SettingsSearchCatalog.entry(id: id))
++        for id in ["spatial-audio", "spatial-layout"] {
++            let entry = SettingsSearchCatalog.entry(id: id)
++            XCTAssertNotNil(entry)
++            XCTAssertFalse(entry?.isAvailable(on: .television, osVersion: 25) ?? true)
++            XCTAssertTrue(entry?.isAvailable(on: .television, osVersion: 26) ?? false)
+         }
+         XCTAssertTrue(SettingsSearchPage.accountLibraries.requiresParentalAuthorization)
+         XCTAssertTrue(SettingsSearchPage.profileSettings.requiresParentalAuthorization)
+diff --git a/Tests/CoreModelsTests/SpatialAudioLayoutTests.swift b/Tests/CoreModelsTests/SpatialAudioLayoutTests.swift
+index be763faae..b8a448ce5 100644
+--- a/Tests/CoreModelsTests/SpatialAudioLayoutTests.swift
++++ b/Tests/CoreModelsTests/SpatialAudioLayoutTests.swift
+@@ -10,15 +10,19 @@ final class SpatialAudioLayoutTests: XCTestCase {
+                        [.sevenOneFour, .nineOneSix])
+     }
+ 
+-    func testLegacyLayoutDoesNotChangePlaybackSettings() throws {
++    func testUnconfiguredDeviceDoesNotWriteOrChangeSavedSpatialChoices() throws {
+         try withDefaults { defaults in
+             let store = SpatialAudioLayoutStore(defaults: defaults)
+             for namespace: String? in [nil, "guest"] {
+                 let playback = PlaybackSettingsStore(defaults: defaults, namespace: namespace)
+-                playback.save(.default)
+-                XCTAssertEqual(store.load(), .nineOneSix)
+-                XCTAssertEqual(playback.load(), .default)
+-                XCTAssertNil(defaults.object(forKey: SpatialAudioLayoutStore.storageKey))
++                for enabled in [false, true] {
++                    var settings = PlaybackSettings.default
++                    settings.trueHDAtmosEnabled = enabled
++                    playback.save(settings)
++                    XCTAssertEqual(store.load(), .nineOneSix)
++                    XCTAssertEqual(playback.load().trueHDAtmosEnabled, enabled)
++                    XCTAssertNil(defaults.object(forKey: SpatialAudioLayoutStore.storageKey))
++                }
+             }
+         }
+     }
+diff --git a/Tests/CoreModelsTests/TrueHDAtmosSettingsTests.swift b/Tests/CoreModelsTests/TrueHDAtmosSettingsTests.swift
+index 9df67ad69..5322b4be3 100644
+--- a/Tests/CoreModelsTests/TrueHDAtmosSettingsTests.swift
++++ b/Tests/CoreModelsTests/TrueHDAtmosSettingsTests.swift
+@@ -2,11 +2,11 @@ import XCTest
+ @testable import CoreModels
+ 
+ final class TrueHDAtmosSettingsTests: XCTestCase {
+-    func testRetiredPreferenceIsIgnoredAndNotWrittenBack() throws {
++    func testDefaultAndOlderPayloadsKeepSpatialAudioEnabled() throws {
++        XCTAssertTrue(PlaybackSettings.default.trueHDAtmosEnabled)
+         for payload in [
+             #"{}"#,
+             #"{"trueHDAtmosEnabled":true}"#,
+-            #"{"trueHDAtmosEnabled":false}"#,
+             #"{"trueHDAtmosEnabled":null}"#,
+             #"{"trueHDAtmosEnabled":"unknown"}"#
+         ] {
+@@ -15,17 +15,19 @@ final class TrueHDAtmosSettingsTests: XCTestCase {
+             let encoded = try XCTUnwrap(
+                 JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any]
+             )
+-            XCTAssertNil(encoded["trueHDAtmosEnabled"])
++            XCTAssertEqual(encoded["trueHDAtmosEnabled"] as? Bool, true)
+         }
+     }
+ 
+-    func testBothRetiredChoicesAreIgnoredWithoutChangingOtherPlaybackPreferences() throws {
++    func testBothSavedChoicesRoundTripWithoutChangingOtherPlaybackPreferences() throws {
+         for enabled in [false, true] {
+             let payload = """
+             {"trueHDAtmosEnabled":\(enabled),"dolbyVisionFELEnabled":true,"rememberAudioTrackPerSeries":false}
+             """
+             let settings = try JSONDecoder().decode(PlaybackSettings.self, from: Data(payload.utf8))
+             XCTAssertEqual(settings, PlaybackSettings(
++                trueHDAtmosEnabled: enabled,
++                dolbyVisionFELEnabled: true,
+                 rememberAudioTrackPerSeries: false
+             ))
+             XCTAssertEqual(
+@@ -36,7 +38,7 @@ final class TrueHDAtmosSettingsTests: XCTestCase {
+     }
+ 
+     @MainActor
+-    func testLegacyProfileTransferPreservesOtherPreferencesWithoutRestoringHeightConversion() throws {
++    func testSavedOffChoiceRemainsScopedAndSurvivesProfileTransfer() throws {
+         let suite = "TrueHDAtmosSettingsTests-\(UUID().uuidString)"
+         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+         defer { defaults.removePersistentDomain(forName: suite) }
+@@ -44,10 +46,10 @@ final class TrueHDAtmosSettingsTests: XCTestCase {
+         let guestStore = PlaybackSettingsStore(defaults: defaults, namespace: "guest")
+         let guestKey = SettingsKey.scoped("com.plozz.playbackSettings", namespace: "guest")
+         defaults.set(Data(
+-            #"{"trueHDAtmosEnabled":true,"rememberAudioTrackPerSeries":false}"#.utf8
++            #"{"trueHDAtmosEnabled":false,"rememberAudioTrackPerSeries":false}"#.utf8
+         ), forKey: guestKey)
+         let guest = PlaybackSettingsModel(store: guestStore)
+-        let expected = PlaybackSettings(rememberAudioTrackPerSeries: false)
++        let expected = PlaybackSettings(trueHDAtmosEnabled: false, rememberAudioTrackPerSeries: false)
+         XCTAssertEqual(guest.settings, expected)
+         XCTAssertEqual(PlaybackSettingsModel(store: primaryStore).settings, .default)
+ 
+@@ -57,11 +59,13 @@ final class TrueHDAtmosSettingsTests: XCTestCase {
+         XCTAssertEqual(restoredStore.load(), expected)
+ 
+         guest.settings.audioLanguagePreference = .language("ja")
++        guest.settings.trueHDAtmosEnabled = true
+         XCTAssertEqual(guestStore.load().audioLanguagePreference, .language("ja"))
+         XCTAssertEqual(restoredStore.load(), expected)
+         let saved = try XCTUnwrap(
+             JSONSerialization.jsonObject(with: XCTUnwrap(defaults.data(forKey: guestKey))) as? [String: Any]
+         )
+-        XCTAssertNil(saved["trueHDAtmosEnabled"])
++        XCTAssertEqual(saved["trueHDAtmosEnabled"] as? Bool, true)
++        XCTAssertFalse(restoredStore.load().trueHDAtmosEnabled)
+     }
+ }
+diff --git a/Tests/EnginePlozzigenTests/AetherReleaseIntegrationTests.swift b/Tests/EnginePlozzigenTests/AetherReleaseIntegrationTests.swift
+index 39e58d1d5..d90e634ed 100644
+--- a/Tests/EnginePlozzigenTests/AetherReleaseIntegrationTests.swift
++++ b/Tests/EnginePlozzigenTests/AetherReleaseIntegrationTests.swift
+@@ -38,6 +38,19 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+         XCTAssertEqual(engine.displayName, "AetherEngine v\(AetherEngine.version)")
+     }
+ 
++    func testProductionSpatialConversionComponentsAreBuiltIn() {
++        XCTAssertTrue(AetherEngine.OptionalComponent.trueHDObjectAudio.isBuiltIn)
++        XCTAssertTrue(AetherEngine.OptionalComponent.dtsxObjectAudio.isBuiltIn)
++    }
++
++    func testDolbyVisionComponentsRemainBuiltIn() {
++        for component in [
++            AetherEngine.OptionalComponent.dualLayerDolbyVision, .dolbyVisionStillReshaping
++        ] {
++            XCTAssertTrue(component.isBuiltIn, "\(component.traitName) must not silently become a no-op")
++        }
++    }
++
+     func testEngineLivesInItsOwnDynamicFramework() {
+         let engineBundle = Bundle(for: AetherEngine.self)
+         XCTAssertEqual(engineBundle.bundleURL.lastPathComponent, "AetherEngine.framework")
+@@ -87,33 +100,36 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+         XCTAssertEqual(diagnostics.audioEncodingDescription, "No re-encoding")
+     }
+ 
+-    func testOnDemandOptionsKeepStandardDolbyVisionAndAudioWithoutFEL() {
+-        let options = PlozzigenVideoEngine.onDemandLoadOptions()
+-        XCTAssertFalse(options.preferDualLayerDolbyVision)
+-        XCTAssertEqual(options.dolbyVisionHandling, .automatic)
+-        XCTAssertFalse(options.isLive)
+-        XCTAssertTrue(options.matchContentEnabled)
+-        XCTAssertEqual(options.audioBridgeMode, .lossless)
+-        XCTAssertEqual(options.objectAudioRendering, .off)
++    func testFELPreferenceReachesOnDemandOptionsWithoutDisablingAudioForOtherSources() {
++        for enabled in [false, true] {
++            let options = PlozzigenVideoEngine.onDemandLoadOptions(
++                dolbyVisionFELEnabled: enabled
++            )
++            XCTAssertEqual(options.preferDualLayerDolbyVision, enabled)
++            XCTAssertEqual(options.dolbyVisionHandling, .automatic)
++            XCTAssertFalse(options.isLive)
++            XCTAssertTrue(options.matchContentEnabled)
++            XCTAssertEqual(options.audioBridgeMode, .lossless)
++            assertSpatialRendering(options, enabled: true)
++        }
+     }
+ 
+     @MainActor
+-    func testResolvedRequestsNeverEnableFELOrHeightConversionAcrossProviders() throws {
++    func testResolvedRequestCarriesSpatialAndFELPreferencesIntoActualAdapterOptions() throws {
+         let engine = try PlozzigenVideoEngine()
+         defer { engine.stop() }
+         for provider in [ProviderKind.plex, .jellyfin, .emby, .mediaShare, .silo] {
+-            for url in [
+-                URL(string: "https://media.example/movie.mkv")!,
+-                URL(fileURLWithPath: "/fixture/download.mkv")
+-            ] {
++            for enabled in [false, true] {
+                 var request = PlaybackRequest(
+-                    item: MediaItem(id: "fel", title: "FEL fixture", kind: .movie), streamURL: url
++                    item: MediaItem(id: "fel", title: "FEL fixture", kind: .movie),
++                    streamURL: URL(string: "https://media.example/movie.mkv")!
+                 )
+                 request.sourceProvider = provider
++                request.trueHDAtmosEnabled = enabled
++                request.dolbyVisionFELEnabled = enabled
+                 let options = engine.onDemandLoadOptions(for: request)
+-                XCTAssertFalse(options.preferDualLayerDolbyVision)
+-                XCTAssertEqual(options.dolbyVisionHandling, .automatic)
+-                XCTAssertEqual(options.objectAudioRendering, .off)
++                XCTAssertEqual(options.preferDualLayerDolbyVision, enabled)
++                assertSpatialRendering(options, enabled: enabled)
+             }
+         }
+     }
+@@ -129,18 +145,20 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+         }
+     }
+ 
+-    func testOnDemandPlaybackPreservesChannelBridgeAndBufferingWithoutHeightConversion() {
++    func testOnDemandSpatialChoicePreservesChannelFallbackAndBuffering() {
+         for lossless in [false, true] {
+-            for buffer in PlaybackReadAhead.allCases {
+-                let options = PlozzigenVideoEngine.onDemandLoadOptions(
+-                    losslessAudioEnabled: lossless, readAhead: buffer
+-                )
+-                XCTAssertEqual(options.objectAudioRendering, .off)
+-                XCTAssertEqual(options.audioBridgeMode, lossless ? .lossless : .surroundCompat)
+-                XCTAssertEqual(options.sessionCacheByteBudget, buffer == .automatic ? nil : Int.max)
+-                XCTAssertTrue(options.matchContentEnabled)
+-                XCTAssertFalse(options.isLive)
+-                XCTAssertFalse(options.progressiveSegmentDelivery)
++            for enabled in [false, true] {
++                for buffer in PlaybackReadAhead.allCases {
++                    let options = PlozzigenVideoEngine.onDemandLoadOptions(
++                        losslessAudioEnabled: lossless, trueHDAtmosEnabled: enabled, readAhead: buffer
++                    )
++                    assertSpatialRendering(options, enabled: enabled)
++                    XCTAssertEqual(options.audioBridgeMode, lossless ? .lossless : .surroundCompat)
++                    XCTAssertEqual(options.sessionCacheByteBudget, buffer == .automatic ? nil : Int.max)
++                    XCTAssertTrue(options.matchContentEnabled)
++                    XCTAssertFalse(options.isLive)
++                    XCTAssertFalse(options.progressiveSegmentDelivery)
++                }
+             }
+         }
+     }
+@@ -152,7 +170,7 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+             .init(isAudible: false, sharesAudioSession: true, suppressesDisplayMatching: true)
+         ] {
+             let options = PlozzigenVideoEngine.onDemandLoadOptions(
+-                outputPolicy: policy
++                dolbyVisionFELEnabled: true, outputPolicy: policy
+             )
+             XCTAssertEqual(options.objectAudioRendering, .off)
+             XCTAssertFalse(options.preferDualLayerDolbyVision)
+@@ -164,6 +182,7 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+ 
+     func testDisplaySuppressedPreviewDoesNotRequestFEL() {
+         let options = PlozzigenVideoEngine.onDemandLoadOptions(
++            dolbyVisionFELEnabled: true,
+             outputPolicy: .init(isAudible: true, suppressesDisplayMatching: true)
+         )
+         XCTAssertFalse(options.preferDualLayerDolbyVision)
+@@ -171,7 +190,7 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+ 
+     func testTrueHDLegalCreditIncludesSourceAndBothLicenses() throws {
+         let credit = try XCTUnwrap(PlozzAttributions.entries.first { $0.title == "LibTrueHD" })
+-        XCTAssertTrue(credit.detail.contains("not linked in this build"))
++        XCTAssertFalse(credit.detail.contains("not linked in this build"))
+         XCTAssertTrue(credit.detail.contains(
+             "https://github.com/superuser404notfound/LibTrueHD/tree/3.1.0"
+         ))
+@@ -181,6 +200,18 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+         XCTAssertEqual(Set(credit.licenses.map(\.label)), ["MIT", "Apache-2.0"])
+     }
+ 
++    private func assertSpatialRendering(
++        _ options: LoadOptions, enabled: Bool, file: StaticString = #filePath, line: UInt = #line
++    ) {
++        #if os(tvOS) || os(iOS)
++        if #available(tvOS 26.0, iOS 26.0, *), enabled {
++            XCTAssertEqual(options.objectAudioRendering, .render(.l916), file: file, line: line)
++            return
++        }
++        #endif
++        XCTAssertEqual(options.objectAudioRendering, .off, file: file, line: line)
++    }
++
+     func testFFmpegCreditRemainsWithoutTheRetiredLibDTSXCredit() {
+         XCTAssertFalse(PlozzAttributions.entries.contains { $0.title == "LibDTSX" })
+         XCTAssertTrue(PlozzAttributions.entries.contains { $0.title == "FFmpeg" })
+diff --git a/Tests/EnginePlozzigenTests/SpatialAudioLayoutPreferenceTests.swift b/Tests/EnginePlozzigenTests/SpatialAudioLayoutPreferenceTests.swift
+index c0ecf10a2..eda305c43 100644
+--- a/Tests/EnginePlozzigenTests/SpatialAudioLayoutPreferenceTests.swift
++++ b/Tests/EnginePlozzigenTests/SpatialAudioLayoutPreferenceTests.swift
+@@ -6,19 +6,27 @@ import XCTest
+ 
+ @MainActor
+ final class SpatialAudioLayoutPreferenceTests: XCTestCase {
+-    func testRetiredComponentsAreExcludedWhileDolbyVisionStillsRemainAvailable() {
+-        XCTAssertFalse(AetherEngine.OptionalComponent.trueHDObjectAudio.isBuiltIn)
+-        XCTAssertFalse(AetherEngine.OptionalComponent.dtsxObjectAudio.isBuiltIn)
+-        XCTAssertFalse(AetherEngine.OptionalComponent.dualLayerDolbyVision.isBuiltIn)
+-        XCTAssertTrue(AetherEngine.OptionalComponent.dolbyVisionStillReshaping.isBuiltIn)
++    func testEveryLayoutMapsToItsEngineBedAndDTSXCapability() {
++        XCTAssertEqual(SpatialAudioLayout.allCases.count, SpatialSpeakerLayout.allCases.count)
++        for layout in SpatialAudioLayout.allCases {
++            let bed = PlozzigenVideoEngine.spatialSpeakerLayout(layout)
++            XCTAssertEqual(bed.rawValue, layout.rawValue)
++            XCTAssertEqual(bed.carriesDTSXOneToOne, layout.supportsDTSXHeights)
++            let rendering = ObjectAudioRendering.render(bed)
++            XCTAssertEqual(rendering.bedFormat(routeFormat: .lpcm), .lpcm)
++            XCTAssertEqual(rendering.bedFormat(routeFormat: .apac), .apac)
++        }
++        XCTAssertEqual(SpatialBedFormat.forRoute(portTypes: ["HDMIOutput"]), .lpcm)
++        XCTAssertEqual(SpatialBedFormat.forRoute(portTypes: ["BluetoothA2DPOutput"]), .lpcm)
++        XCTAssertEqual(SpatialBedFormat.forRoute(portTypes: ["HDMIOutput", "AirPlay"]), .apac)
+     }
+ 
+-    func testLegacyLayoutsCannotEnableHeightConversionAcrossProvidersAndDownloads() throws {
+-        let defaults = UserDefaults.standard
+-        let previousLayout = defaults.object(forKey: SpatialAudioLayoutStore.storageKey)
+-        defer { defaults.set(previousLayout, forKey: SpatialAudioLayoutStore.storageKey) }
++    func testEachNewLoadUsesDeviceLayoutAcrossProvidersAndDownloads() throws {
++        let suite = "SpatialAudioLayoutPreferenceTests.\(UUID())"
++        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
++        defer { defaults.removePersistentDomain(forName: suite) }
+         let store = SpatialAudioLayoutStore(defaults: defaults)
+-        let engine = try PlozzigenVideoEngine()
++        let engine = try PlozzigenVideoEngine(spatialAudioLayoutPreference: { store.load() })
+         defer { engine.stop() }
+         let earlier = engine.onDemandLoadOptions(for: request)
+         for layout in SpatialAudioLayout.allCases {
+@@ -28,36 +36,48 @@ final class SpatialAudioLayoutPreferenceTests: XCTestCase {
+                     var request = request
+                     request.sourceProvider = provider
+                     request.sourceMetadata = .init(audio: .init(codec: "dts", channels: channels))
+-                    XCTAssertEqual(engine.onDemandLoadOptions(for: request).objectAudioRendering, .off)
++                    assertRendering(engine.onDemandLoadOptions(for: request), layout: layout)
+                     request.streamURL = URL(fileURLWithPath: "/fixture/download.mkv")
+-                    XCTAssertEqual(engine.onDemandLoadOptions(for: request).objectAudioRendering, .off)
++                    assertRendering(engine.onDemandLoadOptions(for: request), layout: layout)
+                 }
+             }
+         }
+-        XCTAssertEqual(earlier.objectAudioRendering, .off)
++        assertRendering(earlier, layout: .nineOneSix)
+     }
+ 
+-    func testEveryOutputPolicyKeepsHeightConversionOffAndPreservesOrdinaryBridge() {
+-        for lossless in [false, true] {
+-            for policy in [
+-                LiveChannelOutputPolicy(isAudible: true),
+-                .init(isAudible: false),
+-                .init(isAudible: true, sharesAudioSession: true),
+-                .init(isAudible: false, sharesAudioSession: true)
+-            ] {
+-                let options = PlozzigenVideoEngine.onDemandLoadOptions(
+-                    losslessAudioEnabled: lossless, outputPolicy: policy
++    func testLayoutDoesNotEnableDisabledOrIneligiblePlaybackOrChangeOrdinaryBridge() {
++        for layout in SpatialAudioLayout.allCases {
++            for lossless in [false, true] {
++                let disabled = PlozzigenVideoEngine.onDemandLoadOptions(
++                    losslessAudioEnabled: lossless, trueHDAtmosEnabled: false, spatialAudioLayout: layout
++                )
++                XCTAssertEqual(disabled.objectAudioRendering, .off)
++                XCTAssertEqual(disabled.audioBridgeMode, lossless ? .lossless : .surroundCompat)
++                for policy in [
++                    LiveChannelOutputPolicy(isAudible: false),
++                    .init(isAudible: true, sharesAudioSession: true)
++                ] {
++                    let options = PlozzigenVideoEngine.onDemandLoadOptions(
++                        losslessAudioEnabled: lossless, spatialAudioLayout: layout, outputPolicy: policy
++                    )
++                    XCTAssertEqual(options.objectAudioRendering, .off)
++                    XCTAssertEqual(options.audioBridgeMode, disabled.audioBridgeMode)
++                }
++                let enabled = PlozzigenVideoEngine.onDemandLoadOptions(
++                    losslessAudioEnabled: lossless, spatialAudioLayout: layout
+                 )
+-                XCTAssertEqual(options.objectAudioRendering, .off)
+-                XCTAssertEqual(options.audioBridgeMode, lossless ? .lossless : .surroundCompat)
++                assertRendering(enabled, layout: layout)
++                XCTAssertEqual(enabled.audioBridgeMode, disabled.audioBridgeMode)
+             }
+         }
+     }
+ 
+-    func testHeightConversionStaysOffForOnDemandAndLiveStreams() {
+-        let onDemand = PlozzigenVideoEngine.onDemandLoadOptions()
+-        XCTAssertEqual(onDemand.objectAudioRendering, .off)
+-        XCTAssertFalse(onDemand.preferDualLayerDolbyVision)
++    func testDefaultSpatialRenderingAlsoAppliesToFELButNeverToLiveStreams() {
++        for fel in [false, true] {
++            let options = PlozzigenVideoEngine.onDemandLoadOptions(dolbyVisionFELEnabled: fel)
++            assertRendering(options, layout: .default)
++            XCTAssertEqual(options.preferDualLayerDolbyVision, fel)
++        }
+         for suffix in ["ts", "m3u8"] {
+             let options = PlozzigenVideoEngine.liveLoadOptions(
+                 httpHeaders: [:], url: URL(string: "https://example.invalid/live.\(suffix)")
+@@ -67,7 +87,8 @@ final class SpatialAudioLayoutPreferenceTests: XCTestCase {
+     }
+ 
+     func testActualRenderedPipelineLabelsAreRecognized() {
+-        for bed in SpatialSpeakerLayout.allCases {
++        for layout in SpatialAudioLayout.allCases {
++            let bed = PlozzigenVideoEngine.spatialSpeakerLayout(layout)
+             for codec in ["truehd", "dts"] {
+                 let track = TrackInfo(id: 0, name: "English", codec: codec, language: "en", isDefault: true)
+                 for (route, expected): (SoftwareAtmosRoute, LocalizedStringResource) in [
+@@ -84,6 +105,20 @@ final class SpatialAudioLayoutPreferenceTests: XCTestCase {
+         }
+     }
+ 
++    private func assertRendering(
++        _ options: LoadOptions, layout: SpatialAudioLayout,
++        file: StaticString = #filePath, line: UInt = #line
++    ) {
++        #if os(tvOS) || os(iOS)
++        if #available(tvOS 26.0, iOS 26.0, *) {
++            XCTAssertEqual(options.objectAudioRendering,
++                           .render(PlozzigenVideoEngine.spatialSpeakerLayout(layout)), file: file, line: line)
++            return
++        }
++        #endif
++        XCTAssertEqual(options.objectAudioRendering, .off, file: file, line: line)
++    }
++
+     private var request: PlaybackRequest {
+         PlaybackRequest(item: MediaItem(id: "movie", title: "Fixture", kind: .movie),
+                         streamURL: URL(string: "https://example.invalid/movie.mkv")!)
+diff --git a/Tests/FeaturePlaybackTests/PlayerViewModelEOFTests.swift b/Tests/FeaturePlaybackTests/PlayerViewModelEOFTests.swift
+index 1a45cacbd..1ead42650 100644
+--- a/Tests/FeaturePlaybackTests/PlayerViewModelEOFTests.swift
++++ b/Tests/FeaturePlaybackTests/PlayerViewModelEOFTests.swift
+@@ -1272,9 +1272,7 @@ final class PlayerViewModelEOFTests: XCTestCase {
+     func testLegacyAudioSettingsPreserveTrackPreferencesAcrossHandoff() async throws {
+         for enabled in [false, true] {
+             let settings = try JSONDecoder().decode(
+-                PlaybackSettings.self, from: Data("""
+-                {"trueHDAtmosEnabled":\(enabled),"dolbyVisionFELEnabled":\(enabled)}
+-                """.utf8)
++                PlaybackSettings.self, from: Data("{\"trueHDAtmosEnabled\":\(enabled)}".utf8)
+             )
+             let (viewModel, engine, _) = makeViewModel(
+                 playbackSettings: settings
+@@ -1291,6 +1289,25 @@ final class PlayerViewModelEOFTests: XCTestCase {
+         }
+     }
+ 
++    func testSpatialAndFELPreferencesReachInitialAndHandoffLoads() async throws {
++        for enabled in [false, true] {
++            let (viewModel, engine, _) = makeViewModel(
++                playbackSettings: .init(trueHDAtmosEnabled: enabled, dolbyVisionFELEnabled: enabled)
++            )
++            await viewModel.load()
++            XCTAssertEqual(engine.lastLoadedRequest?.dolbyVisionFELEnabled, enabled)
++            XCTAssertEqual(engine.lastLoadedRequest?.trueHDAtmosEnabled, enabled)
++            var handoff = try XCTUnwrap(engine.lastLoadedRequest)
++            handoff.dolbyVisionFELEnabled = !enabled
++            handoff.trueHDAtmosEnabled = !enabled
++            await viewModel.handoffPlayResolved(handoff, engineKind: .native, startPosition: 10)
++            XCTAssertEqual(engine.loadCount, 2)
++            XCTAssertEqual(engine.lastLoadedRequest?.dolbyVisionFELEnabled, enabled)
++            XCTAssertEqual(engine.lastLoadedRequest?.trueHDAtmosEnabled, enabled)
++            await viewModel.stop()
++        }
++    }
++
+     func testBackgroundAudioPreferenceReachesEngineAndPreservesPlatformDefault() async {
+         let publisher = VideoNowPlayingPublisherSpy()
+         let (viewModel, engine, _) = makeViewModel(
+diff --git a/Tests/FeatureSettingsTests/SettingsWorkspaceNavigationTests.swift b/Tests/FeatureSettingsTests/SettingsWorkspaceNavigationTests.swift
+index 2ad0c6acf..36bffb66a 100644
+--- a/Tests/FeatureSettingsTests/SettingsWorkspaceNavigationTests.swift
++++ b/Tests/FeatureSettingsTests/SettingsWorkspaceNavigationTests.swift
+@@ -6,15 +6,26 @@ import XCTest
+ 
+ @MainActor
+ final class SettingsWorkspaceNavigationTests: XCTestCase {
+-    func testAdvancedPlaybackKeepsExternalPlayerWithoutRetiredConversionControls() throws {
++    func testAdvancedPlaybackIncludesProfileScopedFELWithoutChangingExternalPlayerScope() throws {
+         let suite = "AdvancedPlaybackSettingsTests.\(UUID().uuidString)"
+         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+         defer { defaults.removePersistentDomain(forName: suite) }
++        let playback = PlaybackSettingsModel(store: PlaybackSettingsStore(defaults: defaults, namespace: "guest"))
+         let external = ExternalPlayerSettingsModel(defaults: defaults)
+-        let rows = PlaybackAdvancedSettingsView.rows(model: external)
+-        let expectedIDs = ["external-player"]
++        let rows = PlaybackAdvancedSettingsView.rows(playback: playback, model: external)
++        var expectedIDs = ["external-player", "dolby-vision-fel"]
++        #if os(tvOS)
++        if #available(tvOS 26.0, *) {
++            expectedIDs.append("spatial-audio-layout")
++        }
++        #endif
+         XCTAssertEqual(rows.map(\.id), expectedIDs)
+         XCTAssertEqual(rows.first?.presentation, .page)
++        XCTAssertNil(rows.first(where: { $0.id == "dolby-vision-fel" })?.childRows)
++        XCTAssertFalse(playback.settings.dolbyVisionFELEnabled)
++        playback.settings.dolbyVisionFELEnabled = true
++        XCTAssertTrue(PlaybackSettingsStore(defaults: defaults, namespace: "guest").load().dolbyVisionFELEnabled)
++        XCTAssertFalse(PlaybackSettingsStore(defaults: defaults).load().dolbyVisionFELEnabled)
+         XCTAssertEqual(external.settings.player, .builtIn)
+     }
+ 
+diff --git a/Tests/FocusHost/PlaybackReadAheadFixture.swift b/Tests/FocusHost/PlaybackReadAheadFixture.swift
+index 4ab19fac4..5fdf61a97 100644
+--- a/Tests/FocusHost/PlaybackReadAheadFixture.swift
++++ b/Tests/FocusHost/PlaybackReadAheadFixture.swift
+@@ -18,6 +18,9 @@ struct PlaybackReadAheadFixture: View {
+             PlaybackReadAheadStore().save(.default)
+             LivePlaybackBufferStore().save(.default)
+         }
++        if ProcessInfo.processInfo.arguments.contains("--reset-spatial-audio") {
++            PlaybackSettingsStore(namespace: "read-ahead-fixture").save(.default)
++        }
+         _models = State(initialValue: ProfileSettingsModel(namespace: "read-ahead-fixture"))
+     }
+ 
+@@ -46,6 +49,8 @@ struct PlaybackReadAheadFixture: View {
+                     .accessibilityIdentifier("read-ahead-saved")
+                 Text(verbatim: liveSelection.rawValue)
+                     .accessibilityIdentifier("live-buffer-saved")
++                Text(verbatim: models.playbackModel.settings.trueHDAtmosEnabled ? "on" : "off")
++                    .accessibilityIdentifier("spatial-audio-saved")
+             }
+         }
+     }
+diff --git a/Tests/FocusIntegrationTests/PlaybackSettingsHostedTests.swift b/Tests/FocusIntegrationTests/PlaybackSettingsHostedTests.swift
+index 017c2d17e..7545e4926 100644
+--- a/Tests/FocusIntegrationTests/PlaybackSettingsHostedTests.swift
++++ b/Tests/FocusIntegrationTests/PlaybackSettingsHostedTests.swift
+@@ -114,9 +114,13 @@ final class PlaybackSettingsHostedTests: XCTestCase {
+         for label in ["Prefer lossless audio", "regular HDMI ARC", "compressed audio"] {
+             XCTAssertTrue(text.contains(label), text)
+         }
+-        for label in ["Spatial audio", "height channel support", "TrueHD Atmos",
+-                      "DTS:X", "Rendering layout"] {
+-            XCTAssertFalse(text.contains(label), text)
++        if #available(tvOS 26.0, *) {
++            for label in ["Spatial audio", "height channel support", "TrueHD Atmos",
++                          "DTS:X", "PCM", "AirPlay", "lossy"] {
++                XCTAssertTrue(text.contains(label), text)
++            }
++        } else {
++            XCTAssertFalse(text.contains("Spatial audio"), text)
+         }
+     }
+ 
+@@ -259,16 +263,19 @@ final class PlaybackSettingsHostedTests: XCTestCase {
+         XCTAssertEqual(PlaybackSettingsStore(defaults: defaults).load(), .default)
+     }
+ 
+-    func testAdvancedPlaybackOmitsRetiredConversionControls() async throws {
++    func testAdvancedPlaybackShowsFELControlAndAudioTradeoff() async throws {
+         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+             .first { $0.activationState == .foregroundActive })
+         let previous = scene.windows.first(where: \.isKeyWindow)
+         let suite = "FELSettingsHosted-\(UUID())"
+         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
++        let playback = PlaybackSettingsModel(store: PlaybackSettingsStore(defaults: defaults, namespace: "guest"))
+         let window = UIWindow(windowScene: scene)
+         window.frame = CGRect(x: 0, y: 0, width: 1920, height: 1080)
+         window.rootViewController = UIHostingController(rootView:
+-            PlaybackAdvancedSettingsView(model: ExternalPlayerSettingsModel(defaults: defaults))
++            PlaybackAdvancedSettingsView(
++                playback: playback, model: ExternalPlayerSettingsModel(defaults: defaults)
++            )
+             .environment(\.settingsInWorkspace, true)
+             .environment(\.themePalette, .dark)
+             .environment(\.locale, Locale(identifier: "en_US"))
+@@ -284,16 +291,78 @@ final class PlaybackSettingsHostedTests: XCTestCase {
+             defaults.removePersistentDomain(forName: suite)
+         }
+         try await Task.sleep(for: .milliseconds(400))
+-        let text = try visibleText(in: window, attachment: "Advanced playback settings")
+-        XCTAssertTrue(text.contains("External player"), text)
+-        let page = try await allPageText(in: window, attachment: "Advanced-without-conversion")
+-        for label in [
+-            "FEL", "experimental", "May impact performance.", "Disables spatial audio.",
+-            "Rendering layout", "9.1.6", "DTS:X", "height channel support"
+-        ] {
+-            XCTAssertFalse(page.contains(label), page)
++        let text = try visibleText(in: window, attachment: "FEL advanced playback setting")
++        for label in ["FEL", "experimental", "May impact performance."] {
++            XCTAssertTrue(text.contains(label), "The setting and tradeoff must be visible: \(text)")
++        }
++        if #available(tvOS 26.0, *) {
++            XCTAssertFalse(text.contains("Disables spatial audio."), text)
++            let page = try await allPageText(in: window, attachment: "Advanced-spatial-layout")
++            for label in ["Rendering layout", "9.1.6", "DTS:X heights require 7.1.4 or 9.1.6."] {
++                XCTAssertTrue(page.contains(label), page)
++            }
++        } else {
++            XCTAssertTrue(text.contains("Disables spatial audio."), text)
++            XCTAssertFalse(text.contains("DTS:X"), text)
+         }
+         XCTAssertFalse(text.contains("Dolby Atmos"), text)
++        XCTAssertFalse(playback.settings.dolbyVisionFELEnabled)
++    }
++
++    func testSpatialLayoutControlUpdatesFromDeviceStoreAndFitsLargeText() async throws {
++        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
++            .first { $0.activationState == .foregroundActive })
++        let previous = scene.windows.first(where: \.isKeyWindow)
++        let suite = "SpatialLayoutHosted-\(UUID())"
++        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
++        let store = SpatialAudioLayoutStore(defaults: defaults)
++        let window = UIWindow(windowScene: scene)
++        defer {
++            window.isHidden = true
++            window.rootViewController = nil
++            previous?.makeKeyAndVisible()
++            defaults.removePersistentDomain(forName: suite)
++        }
++        for (size, typeSize): (CGSize, DynamicTypeSize) in [
++            (.init(width: 1100, height: 440), .large),
++            (.init(width: 760, height: 700), .accessibility3)
++        ] {
++            window.frame = CGRect(origin: .zero, size: size)
++            window.rootViewController = UIHostingController(rootView:
++                SpatialAudioLayoutControl(defaults: defaults)
++                    .padding(24)
++                    .frame(maxWidth: .infinity, maxHeight: .infinity)
++                    .environment(\.dynamicTypeSize, typeSize)
++                    .environment(\.themePalette, .dark)
++                    .environment(\.colorScheme, .dark)
++                    .environment(\.locale, Locale(identifier: "en_US"))
++                    .background(.black)
++            )
++            window.makeKeyAndVisible()
++            for layout in SpatialAudioLayout.allCases {
++                store.save(layout)
++                try await Task.sleep(for: .milliseconds(200))
++                try await waitForHostedLayout(window)
++                let text = try visibleText(in: window, attachment: "Spatial-layout-\(layout.rawValue)-\(typeSize)")
++                let normalizedText = text.replacingOccurrences(of: ": ", with: ":")
++                for label in ["Rendering layout", "Applies to this device.",
++                              "DTS:X heights require 7.1.4 or 9.1.6."] {
++                    XCTAssertTrue(normalizedText.contains(label), text)
++                }
++                let controlFrames = self.profileFocusFrames(in: window)
++                XCTAssertEqual(controlFrames.count, 1)
++                let frame = try XCTUnwrap(controlFrames.first)
++                XCTAssertTrue(window.bounds.contains(frame))
++                let valueText = try visibleText(
++                    in: window, attachment: "Spatial-layout-value-\(layout.rawValue)-\(typeSize)",
++                    crop: CGRect(x: frame.minX + frame.width * 0.65, y: frame.minY,
++                                 width: frame.width * 0.35, height: frame.height)
++                )
++                XCTAssertTrue(valueText.contains(layout.rawValue), valueText)
++                XCTAssertFalse(text.contains("…"), text)
++                XCTAssertEqual(store.load(), layout)
++            }
++        }
+     }
+ 
+     func testLibrarySourcesShowConfiguredNamesAndUpdateWithProfileSelection() async throws {
+@@ -436,7 +505,8 @@ final class PlaybackSettingsHostedTests: XCTestCase {
+                 "Show Up Next card", "Time before the end",
+                 "Skip intros, credits & more",
+                 "Video buffer", "Live TV buffer", "Automatic", "temporary storage",
+-                "adds live delay"
++                "adds live delay", "Spatial audio", "height channel support",
++                "TrueHD Atmos", "DTS:X", "PCM", "AirPlay", "lossy"
+             ] {
+                 XCTAssertTrue(visible.contains(label), "Missing inline control \(label): \(visible)")
+             }
+@@ -450,9 +520,7 @@ final class PlaybackSettingsHostedTests: XCTestCase {
+             XCTAssertFalse(visible.contains("The player closes when an episode finishes"), visible)
+             XCTAssertFalse(visible.contains("Show a Skip button, or skip automatically"), visible)
+             XCTAssertFalse(visible.contains("When your server has no intro or credits marker"), visible)
+-            for label in ["height channel support", "TrueHD Atmos", "DTS:X", "Rendering layout"] {
+-                XCTAssertFalse(visible.contains(label), visible)
+-            }
++            XCTAssertTrue(playback.settings.trueHDAtmosEnabled)
+             XCTAssertEqual(visible.contains("Customize"), enabled, visible)
+             XCTAssertFalse(visible.contains("Skip markers"), visible)
+             for label in ["Set each marker separately", "Use community markers", "Show skip button",
+diff --git a/Tests/HomeRemoteTests/PlaybackReadAheadRemoteTests.swift b/Tests/HomeRemoteTests/PlaybackReadAheadRemoteTests.swift
+index da55f8b74..7002ab8ca 100644
+--- a/Tests/HomeRemoteTests/PlaybackReadAheadRemoteTests.swift
++++ b/Tests/HomeRemoteTests/PlaybackReadAheadRemoteTests.swift
+@@ -174,22 +174,28 @@ final class PlaybackReadAheadRemoteTests: XCTestCase {
+             .matching(NSPredicate(format: "hasFocus == true")).firstMatch.exists)
+     }
+ 
+-    func testPlaybackAudioRowNoLongerOffersHeightConversion() {
++    func testSpatialAudioDefaultsOnAndSavedOffSurvivesRelaunch() {
+         let app = XCUIApplication(bundleIdentifier: "com.thatcube.Plozz.FocusHost")
+-        app.launchArguments = ["--read-ahead-settings-fixture"]
++        app.launchArguments = ["--read-ahead-settings-fixture", "--reset-spatial-audio"]
+         app.launch()
+         defer { app.terminate() }
+-        XCTAssertTrue(app.staticTexts["read-ahead-saved"].waitForExistence(timeout: 10))
+-        let row = app.buttons["settings-master-lossless-surround"]
++        XCTAssertTrue(app.staticTexts["spatial-audio-saved"].waitForExistence(timeout: 10))
++        XCTAssertEqual(app.staticTexts["spatial-audio-saved"].label, "on")
++        let row = app.buttons["settings-master-truehd-atmos"]
+         for _ in 0..<40 {
+-            if hasFocus(row) { break }
++            if row.hasFocus { break }
+             XCUIRemote.shared.press(.down)
+         }
+-        XCTAssertTrue(hasFocus(row))
++        XCTAssertTrue(row.hasFocus)
+         XCUIRemote.shared.press(.right)
+-        let lossless = app.descendants(matching: .any).matching(identifier: "lossless-surround-toggle").firstMatch
+-        XCTAssertTrue(waitUntil { self.hasFocus(lossless) })
+-        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "spatial-audio-toggle").firstMatch.exists)
+-        XCTAssertFalse(app.staticTexts["Spatial audio (height channel support)"].exists)
++        let toggle = app.descendants(matching: .any).matching(identifier: "spatial-audio-toggle").firstMatch
++        XCTAssertTrue(waitUntil { self.hasFocus(toggle) })
++        XCUIRemote.shared.press(.select)
++        XCTAssertTrue(waitUntil { app.staticTexts["spatial-audio-saved"].label == "off" })
++        app.terminate()
++        app.launchArguments = ["--read-ahead-settings-fixture"]
++        app.launch()
++        XCTAssertTrue(app.staticTexts["spatial-audio-saved"].waitForExistence(timeout: 10))
++        XCTAssertEqual(app.staticTexts["spatial-audio-saved"].label, "off")
+     }
+ }
+diff --git a/Tests/iOSPresentationTests/NativeSettingsToggleTests.swift b/Tests/iOSPresentationTests/NativeSettingsToggleTests.swift
+index 7d140168c..851ee9fb9 100644
+--- a/Tests/iOSPresentationTests/NativeSettingsToggleTests.swift
++++ b/Tests/iOSPresentationTests/NativeSettingsToggleTests.swift
+@@ -1126,7 +1126,7 @@ final class NativeSettingsToggleTests: XCTestCase {
+         }
+     }
+ 
+-    func testAdvancedPlaybackOmitsRetiredConversionControlsOnPhoneAndTablet() async throws {
++    func testAdvancedPlaybackFELUsesNativeSwitchAndPersistsOnlyTheActiveProfile() async throws {
+         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+             .first { $0.activationState == .foregroundActive })
+         let previous = scene.windows.first(where: \.isKeyWindow)
+@@ -1139,13 +1139,15 @@ final class NativeSettingsToggleTests: XCTestCase {
+             previous?.makeKeyAndVisible()
+             defaults.removePersistentDomain(forName: suite)
+         }
++        let playback = PlaybackSettingsModel(store: PlaybackSettingsStore(defaults: defaults, namespace: "guest"))
+         let external = ExternalPlayerSettingsModel(defaults: defaults)
+         for width: CGFloat in [390, 834] {
+             for scheme: ColorScheme in [.light, .dark] {
++                playback.settings.dolbyVisionFELEnabled = false
+                 window.frame = CGRect(x: 0, y: 0, width: width, height: 900)
+                 window.overrideUserInterfaceStyle = scheme == .dark ? .dark : .light
+                 window.rootViewController = UIHostingController(rootView: NavigationStack {
+-                    PlaybackAdvancedSettingsView(model: external)
++                    PlaybackAdvancedSettingsView(playback: playback, model: external)
+                 }
+                 .environment(\.colorScheme, scheme)
+                 .environment(\.themePalette, scheme == .dark ? .dark : .light)
+@@ -1153,19 +1155,92 @@ final class NativeSettingsToggleTests: XCTestCase {
+                 window.makeKeyAndVisible()
+                 try await settle(window)
+                 let switches = listedSwitches(in: window)
+-                XCTAssertTrue(switches.isEmpty)
++                XCTAssertEqual(switches.count, 1)
++                let control = try XCTUnwrap(switches.first)
++                XCTAssertFalse(control.isOn)
+                 let text = try captureText(
+-                    window, name: "advanced-settings-\(Int(width))-\(scheme)"
++                    window, name: "fel-settings-\(Int(width))-\(scheme)"
+                 )
+-                XCTAssertTrue(text.contains("External player"), text)
+-                for label in ["FEL", "experimental", "May impact performance.", "Disables spatial audio."] {
+-                    XCTAssertFalse(text.contains(label), text)
++                for label in ["FEL", "experimental", "May impact performance."] {
++                    XCTAssertTrue(text.contains(label), "The setting and tradeoff must be visible: \(text)")
+                 }
+                 XCTAssertFalse(text.contains("Dolby Atmos"), text)
+-                XCTAssertFalse(text.contains("Rendering layout"), text)
+-                XCTAssertFalse(text.contains("DTS:X"), text)
+-                XCTAssertFalse(text.contains("height channel support"), text)
++                if #available(iOS 26.0, *) {
++                    XCTAssertFalse(text.contains("Disables spatial audio."), text)
++                    XCTAssertTrue(text.contains("Rendering layout"), text)
++                    XCTAssertTrue(text.contains("DTS:X"), text)
++                } else {
++                    XCTAssertTrue(text.contains("Disables spatial audio."), text)
++                    XCTAssertFalse(text.contains("Rendering layout"), text)
++                }
++                control.setOn(true, animated: false)
++                control.sendActions(for: .valueChanged)
++                try await settle(window)
++                XCTAssertTrue(playback.settings.dolbyVisionFELEnabled)
++                XCTAssertTrue(PlaybackSettingsStore(defaults: defaults, namespace: "guest").load().dolbyVisionFELEnabled)
++                XCTAssertFalse(PlaybackSettingsStore(defaults: defaults).load().dolbyVisionFELEnabled)
+                 XCTAssertEqual(external.settings.player, .builtIn)
++                try assertGreenOnState(control, in: window)
++            }
++        }
++    }
++
++    func testSpatialAudioUsesNativeSwitchAndPreservesProfileChoicesOnPhoneAndTablet() async throws {
++        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
++            .first { $0.activationState == .foregroundActive })
++        let previous = scene.windows.first(where: \.isKeyWindow)
++        let window = UIWindow(windowScene: scene)
++        let suite = "SpatialAudioSettingsHosted-\(UUID())"
++        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
++        defer {
++            window.isHidden = true
++            window.rootViewController = nil
++            previous?.makeKeyAndVisible()
++            defaults.removePersistentDomain(forName: suite)
++        }
++        let store = PlaybackSettingsStore(defaults: defaults, namespace: "guest")
++        for width: CGFloat in [390, 834] {
++            for scheme: ColorScheme in [.light, .dark] {
++                store.save(.default)
++                let playback = PlaybackSettingsModel(store: store)
++                window.frame = CGRect(x: 0, y: 0, width: width, height: 900)
++                window.overrideUserInterfaceStyle = scheme == .dark ? .dark : .light
++                window.rootViewController = UIHostingController(rootView:
++                    List {
++                        SettingsSectionGroup("Audio") {
++                            SpatialAudioControl(isOn: Binding(
++                                get: { playback.settings.trueHDAtmosEnabled },
++                                set: { playback.settings.trueHDAtmosEnabled = $0 }
++                            ))
++                        }
++                    }
++                    .settingsPageSurface()
++                    .environment(\.colorScheme, scheme)
++                    .environment(\.themePalette, scheme == .dark ? .dark : .light)
++                    .environment(\.locale, Locale(identifier: "en_US"))
++                )
++                window.makeKeyAndVisible()
++                try await settle(window)
++                let switches = listedSwitches(in: window)
++                if #available(iOS 26.0, *) {
++                    XCTAssertEqual(switches.count, 1)
++                    let control = try XCTUnwrap(switches.first)
++                    XCTAssertTrue(control.isOn)
++                    try assertGreenOnState(control, in: window)
++                    let text = try captureText(window, name: "spatial-audio-\(Int(width))-\(scheme)")
++                    for label in ["Spatial audio", "TrueHD Atmos", "DTS:X", "AirPlay"] {
++                        XCTAssertTrue(text.contains(label), text)
++                    }
++                    control.setOn(false, animated: false)
++                    control.sendActions(for: .valueChanged)
++                    try await settle(window)
++                    XCTAssertFalse(playback.settings.trueHDAtmosEnabled)
++                    XCTAssertFalse(PlaybackSettingsModel(store: store).settings.trueHDAtmosEnabled)
++                } else {
++                    XCTAssertTrue(switches.isEmpty)
++                    XCTAssertTrue(store.load().trueHDAtmosEnabled)
++                }
++                XCTAssertTrue(PlaybackSettingsStore(defaults: defaults).load().trueHDAtmosEnabled)
+             }
+         }
+     }
+diff --git a/docs/playback-engines.md b/docs/playback-engines.md
+index 95867c334..c4731b6a1 100644
+--- a/docs/playback-engines.md
++++ b/docs/playback-engines.md
+@@ -448,8 +448,8 @@ filling a large cushion.
+ 
+ The 7.48.0 integration adds VP9 hardware decoding on supported devices, with a
+ software fallback, and AV1 Dolby Vision Profile 10.1 metadata on the software
+-presentation path. Upstream added optional spatial audio for software/FEL playback
+-on tvOS and iOS/iPadOS 26+; Plozz no longer enables that path. TrueHD's optional
++presentation path. On tvOS and iOS/iPadOS 26+, software/FEL playback can use the existing spatial-audio
++preference instead of always falling back to a channel bed. TrueHD's optional
+ renderer now decodes the object presentation with matrix interpolation through
+ LibTrueHD 3.1.0. This is spatial conversion, not lossless bitstream passthrough.
+ FFmpegBuild advances to 3.10.1, including its libzvbi update and AAC/ALAC
+@@ -475,8 +475,8 @@ Plozz uses the new session-cache byte budget with its existing Video buffer
+ presets and exposes a separate Live TV buffer, both defaulting to Automatic.
+ See [buffering contracts](../Sources/FeaturePlayback/README.md#on-demand-read-ahead)
+ for route limits, temporary storage, safe-edge semantics and startup tradeoffs.
+-Upstream moved DTS:X height decoding to FFmpegBuild 3.9.0; Plozz no longer enables
+-the optional conversion component.
++Upstream moved DTS:X height decoding to FFmpegBuild 3.9.0; Plozz enables its
++production optional conversion component with runtime eligibility gates.
+ ASS/SSA packets with neither a decoded end nor a packet duration are now discarded
+ instead of lingering for a fabricated five seconds. This also applies to sidecars;
+ other subtitle codecs retain their established fallback. This upstream snapshot
+@@ -501,10 +501,10 @@ Upstream 7.44.0 replaced LibDTSX with FFmpeg's patched `dca` decoder.
+ `DTSX.framework` and the retired LibDTSX notices are no longer shipped;
+ existing FFmpeg notices remain.
+ 
+-Plozz enables only `DolbyVisionStillReshaping` on its Swift package dependency.
+-`DualLayerDolbyVision`, `TrueHDObjectAudio` and `DTSXObjectAudio` are disabled,
+-so FEL reconstruction and height-channel conversion are not compiled, and LibTrueHD is not resolved or
+-linked. Ordinary FFmpeg audio decoding is unchanged. Both apps consume this same local package, so no
++Plozz enables `TrueHDObjectAudio`, `DTSXObjectAudio`, `DualLayerDolbyVision` and
++`DolbyVisionStillReshaping` on its Swift package dependency. Upstream removed the
++measurement-only `TrueHDReferenceRender` trait in 7.48.0. LibTrueHD is linked; ordinary FFmpeg
++audio decoding is unchanged. Both apps consume this same local package, so no
+ generated-project trait patch is needed. Engine integration tests inspect the
+ linked engine's `OptionalComponent.isBuiltIn` flags, not just its load options.
+ Upstream's patent-licensing warning still applies; enabling a trait does not
+@@ -522,7 +522,8 @@ spatial speaker positions and a tvOS spatial-output activator for receivers that
+ It also includes live-replay recovery, software-video recovery after a screen lock,
+ and the intervening 7.35.x playback fixes; these are upstream changes, not new
+ Plozz-specific implementations. The current pin uses FFmpegBuild **3.11.1**
+-and LibDovi **2.1.x**. LibTrueHD and LibDTSX are no longer linked in Plozz. It also includes
++and LibDovi **2.1.x**, with LibTrueHD **3.1.0** enabled in Plozz and LibDTSX
++removed. It also includes
+ single-connection spatial-audio probe safeguards and system-composited Dolby Vision
+ held pictures. The fork retains the persistent HTTP body-reader isolation
+ correction from its previous integration.
+@@ -549,28 +550,56 @@ toggle's desired mode or the receiver's output.
+ 
+ ### Spatial audio
+ 
+-**Height-channel conversion is disabled.** The adapter always requests
+-`objectAudioRendering = .off`, and the engine's `TrueHDObjectAudio` and
+-`DTSXObjectAudio` package traits are disabled. Neither saved profile preferences,
+-profile transfers nor old device layout values can turn conversion back on.
+-The former toggle and layout picker are removed on both platforms. Legacy
+-`trueHDAtmosEnabled` JSON values are ignored and omitted when settings are saved.
+-
+-Ordinary channel presentation still follows Prefer lossless audio: FLAC by
+-default, or the E-AC-3 compatibility bridge when off. Software playback uses
+-channel PCM, including for E-AC-3/JOC sources; native E-AC-3/JOC stream-copy remains
+-unaffected. Explicit track selections, language preferences, buffering and
+-progressive segment delivery defaults are unchanged.
+-
+-Compatible native spatial audio remains system-owned. Plozz does not override
+-the OS's Spatial Audio or head-tracking choices. Source format labels do not
+-promise separate height-channel output. Diagnostic parsing retains recognized
+-rendered-layout labels for historical/engine reports rather than inferring
+-output from a preference.
+-
+-LibTrueHD is no longer linked. Both apps retain its unmodified MIT/Apache-2.0
+-license and NOTICE resources, and the credits identify it as a former dependency.
+-Removing this component is not a general patent-clearance or store-approval claim.
++**Spatial audio defaults on for supported on-demand playback on tvOS and iOS/iPadOS 26+.**
++The profile-scoped `trueHDAtmosEnabled` key preserves existing Off choices and
++profile transfers; missing or malformed values use the central default. A build
++that previously omitted the preference cannot recover an Off value already
++discarded by an intervening settings save.
++
++The adapter requests `objectAudioRendering = .render(layout)` only for an audible,
++non-shared on-demand session with the preference enabled. **Rendering layout** in
++Playback > Advanced defaults to **9.1.6** and offers 5.1.2, 5.1.4, 7.1.2, 7.1.4
++and 9.1.6. `SpatialAudioLayoutStore` is device-local, shared by profiles and excluded
++from profile transfer. Each new load reads it; changing the setting does not
++restart playback. The layout is an intermediate rendering bed, not detected
++speakers or proof of the receiver's capabilities.
++
++The engine renders eligible 48 kHz TrueHD Atmos/DTS:X sources on native and
++software routes, retaining ordinary channel fallback. DTS:X separate heights
++require 7.1.4 or 9.1.6; smaller layouts keep normal DTS:X channel playback, not
++silence. Smaller beds can reduce intermediate PCM bandwidth and downstream
++remapping, but no layout is universally better for every output chain.
++
++At load, Aether selects 24-bit PCM unless the active route includes AirPlay,
++which uses lossy APAC. PCM avoids an additional lossy encode of the rendered bed;
++it is not source-bit-identical object audio or original compressed-bitstream
++passthrough. Actual overhead output still requires compatible equipment.
++On iPhone/iPad, compatible AirPods use the system's spatial rendering automatically
++when Spatial Audio is enabled in the OS. Plozz does not override Off, Fixed or
++Head Tracked preferences. Both playback engines declare multichannel content;
++no separate AirPods setting or route-based opt-in is required. The engine selects
++the bed format at load, rather than restarting playback when headphones connect.
++Diagnostics identify actual `PCM <layout>` pipelines as **Rendered to PCM** and
++APAC as **Lossy encoding**, never inferring either from the selected setting.
++
++The pinned production TrueHD implementation decodes the object presentation with
++matrix interpolation through LibTrueHD 3.1.0 and renders it into the requested
++speaker layout before PCM packing or APAC encoding. Upstream removed `BedSplitter` and the
++measurement-only reference-rendering trait in 7.48.0.
++This implementation description is not patent clearance: upstream explicitly
++leaves third-party patent licensing to integrators. Other apps enabling the
++feature does not establish licensing compliance or guarantee App Store approval.
++
++Off and unsupported paths retain the ordinary channel presentation selected by
++Lossless surround: FLAC by default, or the E-AC-3 compatibility bridge when off. Live streams,
++shared players, muted previews and OS versions before 26 do not request conversion.
++On tvOS and iOS/iPadOS 26+, eligible FEL/software audio can use the existing spatial-audio preference;
++unsupported or disabled paths retain channel PCM. Native E-AC-3/JOC stream-copy
++is unaffected. Explicit track selections and language preferences
++remain authoritative. Progressive segment delivery remains off.
++
++Both apps bundle the unmodified LibTrueHD MIT/Apache-2.0 license and NOTICE
++resources and identify the linked decoder in the in-app credits.
+ 
+ The retained 7.23.0 audio-output
+ flush epoch prevents a buffer decoded before a software seek from entering
+@@ -654,21 +683,40 @@ size probes. FFmpegBuild 3.4.x adds AV1 Dolby Vision sample-entry support.
+ 
+ ## Dolby Vision FEL
+ 
+-**Experimental FEL reconstruction is unavailable.** Its Settings control and
+-search result are removed on tvOS and iOS/iPadOS. The adapter explicitly sets
+-`LoadOptions.preferDualLayerDolbyVision = false`, and the `DualLayerDolbyVision`
+-package trait is disabled. Legacy `dolbyVisionFELEnabled` values are ignored when
+-loading or transferring profile settings and omitted on the next save.
+-
+-Normal Dolby Vision handling remains automatic. Profile 7 keeps the existing
+-single-layer Profile 8.1 conversion where the display accepts Dolby Vision, or
+-the HDR10 base layer otherwise; the enhancement layer is discarded. Other
+-profiles, ordinary audio paths, native E-AC-3/JOC stream-copy, and Dolby Vision
+-still-image reshaping are unchanged. External players own their own decoding
+-preferences.
+-
+-Removing the optional reconstruction path does not establish licensing clearance
+-for every remaining video or audio feature.
++**Settings > Playback > Advanced > Dolby Vision FEL (experimental)** is off by
++default, saved per profile, and applied to new built-in on-demand playback
++sessions on tvOS and iOS/iPadOS. Existing profiles remain off, including older
++or malformed stored values. Profile transfer carries the choice. The adapter
++passes it through `LoadOptions.preferDualLayerDolbyVision`; it does not enable
++FEL for live streams, shared players, muted previews or display-suppressed
++previews. External players own their own decoding preferences.
++
++The engine, not provider metadata, decides eligibility: seekable Profile 7 FEL,
++automatic Dolby Vision handling, hardware HEVC decode and the engine's real-time
++pixel budget. MEL, other profiles and unsupported sources retain their ordinary
++route. With FEL off, Profile 7 is converted to single-layer Profile 8.1 where the
++display accepts Dolby Vision, or the HDR10 base layer otherwise; the enhancement
++layer is discarded.
++
++FEL decodes both layers with VideoToolbox and reconstructs the picture with Metal.
++It adds GPU/memory work and uses the sample-buffer playback path, not AVPlayer.
++On tvOS and iOS/iPadOS 26+, the existing Spatial audio preference also applies to eligible FEL
++audio: E-AC-3/JOC can reach the audio renderer compressed, and supported TrueHD
++and DTS:X tracks use route-selected PCM or APAC spatial conversion. Other tracks and disabled spatial
++conversion retain channel PCM. Plozz does not request this conversion on
++OS versions before 26, so FEL still drops spatial information there, including for
++E-AC-3/JOC. The helper says **May impact performance.**, adding **Disables spatial
++audio.** only on those platforms. Non-FEL titles keep their ordinary audio paths.
++Upstream reports spatial-bed measurements on Apple TV, iPhone with AirPods and
++Mac. Those engine-level results do not establish verified Plozz output or
++head tracking on a particular device and output setup.
++
++Upstream documents measured Dolby Vision metadata consumption on tvOS, but not
++on iOS/iPadOS. Enabling the option is not evidence that a particular file took
++the route or that a physical display applied its metadata. The engine logs
++`DV P7 dual-layer route: taken` or the reason it was not taken; actual picture
++and HDMI output require a suitable physical-device sample.
++See the pinned [FEL design and evidence](https://github.com/brandomoore/AetherEngine/blob/45e37ed2e6b66ea520229a6fb8b0f973fe155fda/docs/dolby-vision-fel.md).
+ 
+ ## Remote AV1 Matroska startup
+ 
+@@ -893,11 +941,11 @@ retention assertions; they do not establish physical-device frame pacing.
+ | Feature | Plozzigen | Native |
+ |---------|-----------|--------|
+ | Dolby Vision | ✅ (Profile 5/8; optional dual-layer path, see above) | ✅ (if server delivers DV) |
+-| Directly compatible spatial audio | ✅ (E-AC-3 JOC on the native path; software playback uses channel PCM) | ✅ (if stream has E-AC-3 JOC) |
++| Directly compatible spatial audio | ✅ (E-AC-3 JOC on the native path; software/FEL also eligible with Spatial audio on, tvOS/iOS 26+) | ✅ (if stream has E-AC-3 JOC) |
+ | HDR10 / HLG | ✅ | ✅ |
+ | Full-timeline seek | ✅ | ✅ (if not live transcode) |
+ | PGS subtitles | ✅ (engine-owned subtitle paths) | ❌ (server burn-in needed) |
+-| Spatial audio conversion with heights | ❌ (disabled; ordinary channel audio remains available) | ❌ |
++| Spatial audio conversion with heights | ✅ (supported native and software/FEL tracks on tvOS/iOS 26+, rendered PCM or lossy APAC) | ❌ |
+ | DTS bitstream | ❌ (channel audio uses FLAC/E-AC-3 bridge) | ❌ |
+ | TrueHD bitstream | ❌ (channel audio uses FLAC/E-AC-3 bridge) | ❌ |
+ 
+diff --git a/project.yml b/project.yml
+index fd7030c00..3b3f46d89 100644
+--- a/project.yml
++++ b/project.yml
+@@ -639,7 +639,6 @@ targets:
+     platform: tvOS
+     sources:
+       - path: Tests/FocusIntegrationTests
+-      - path: Tests/EnginePlozzigenTests/SpatialAudioLayoutPreferenceTests.swift
+       - path: Tests/HomePresentationSupport
+       - path: Tests/TestSupportPerformance
+       - path: Tests/PerformancePresentationSupport
+@@ -657,7 +656,6 @@ targets:
+       base:
+         PRODUCT_BUNDLE_IDENTIFIER: com.thatcube.Plozz.FocusTests
+         GENERATE_INFOPLIST_FILE: YES
+-        OTHER_LDFLAGS: "$(inherited) -framework AetherEngine"
+         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/PlozzFocusHost.app/FocusHost"
+         BUNDLE_LOADER: "$(TEST_HOST)"
+     dependencies:
+diff --git a/tools/tests/test_ci_pipeline.py b/tools/tests/test_ci_pipeline.py
+index 0a01a8484..87c15523d 100644
+--- a/tools/tests/test_ci_pipeline.py
++++ b/tools/tests/test_ci_pipeline.py
+@@ -97,9 +97,8 @@ class AttributionTests(unittest.TestCase):
+             with self.subTest(package=package["identity"]):
+                 ref = package["state"].get("version") or package["state"]["revision"]
+                 self.assertIn(package["location"].removesuffix(".git") + "/tree/" + ref, attributions)
+-        for identity in ("ffmpegbuild", "libdovi"):
++        for identity in ("ffmpegbuild", "libdovi", "libtruehd"):
+             self.assertIn(f'`{pins[identity]["version"]}`', notice)
+-        self.assertNotIn("libtruehd", pins)
+ 
+     def test_metadata_services_and_bundled_fonts_are_credited(self):
+         attributions = (ROOT / "Sources/CoreModels/PlozzAttributions.swift").read_text()
