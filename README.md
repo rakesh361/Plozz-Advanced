@@ -7,7 +7,7 @@ Dolby Vision support retained.
 
 One **Plozz Advanced** workflow checks upstream daily at 07:17 UTC. It downloads
 public upstream source into the temporary runner, applies the saved restoration
-and app-identity patches, builds an unsigned tvOS IPA, runs scoped simulator tests,
+and version-display patches, builds an unsigned tvOS IPA, runs scoped simulator tests,
 and publishes a release only after those checks pass. Unchanged source and recipe
 skip the macOS build. A failed patch or check stops publication and leaves the
 previous release available. **Actions → Plozz Advanced → Run workflow** performs
