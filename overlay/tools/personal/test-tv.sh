@@ -9,4 +9,4 @@ if [[ -z "${PLOZZ_SIM_ID:-}" ]]; then
   PLOZZ_SIM_ID="$(python3 tools/select-ci-tvos-simulator.py --sdk-version "$sdk")"
   export PLOZZ_SIM_ID
 fi
-exec tools/run-tests.sh CoreModelsTests EnginePlozzigenTests FeaturePlaybackTests
+exec tools/run-tests.sh CoreModelsTests EnginePlozzigenTests FeaturePlaybackTests FeatureSettingsTests

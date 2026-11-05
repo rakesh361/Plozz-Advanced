@@ -41,7 +41,8 @@ class PreservationTests(unittest.TestCase):
 
     def test_each_missing_trait_is_rejected(self):
         manifest = (ROOT / 'Package.swift').read_text()
-        for trait in ['TrueHDObjectAudio', 'DTSXObjectAudio', 'DualLayerDolbyVision']:
+        for trait in ['TrueHDObjectAudio', 'DTSXObjectAudio', 'DualLayerDolbyVision',
+                      'DolbyVisionStillReshaping']:
             with self.subTest(trait=trait):
                 (self.root / 'Package.swift').write_text(manifest.replace(f'"{trait}"', ''))
                 with self.assertRaisesRegex(ValueError, 'traits missing'):
