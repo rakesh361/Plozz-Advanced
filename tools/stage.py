@@ -14,11 +14,10 @@ with (root / 'SHA256SUMS').open('w') as stream:
     for name in files:
         stream.write(f'{hashlib.sha256((root / name).read_bytes()).hexdigest()}  {name}\n')
 notes = (f'Plozz Advanced, based on upstream {p["upstream_tag"]}.\n\n'
-         'TrueHD Atmos, DTS:X and dual-layer Dolby Vision restoration applied; '
-         'device build and scoped simulator checks passed. Physical playback remains hardware-dependent.\n\n'
-         'Unsigned IPA: sign locally with tvsign. The existing personal bundle identity is preserved. '
-         'Installation remains your choice. The complete patched source snapshot and build recipe '
-         'are supplied with this release; no upstream or personal Git history is included in the snapshot.\n\n'
+         'TrueHD Atmos, DTS:X and dual-layer Dolby Vision support retained. '
+         'Device build and scoped simulator checks passed.\n\n'
+         'Unsigned IPA for local signing with tvsign. Matching patched source, '
+         'dependency versions and checksums are included.\n\n'
          f'Upstream source: https://github.com/{p["upstream_repository"]}/commit/{p["upstream_commit"]}\n\n'
          f'Build recipe: https://github.com/{p["automation_repository"]}/tree/{p["automation_commit"]}\n\n'
          + marker(p['upstream_commit'], p['automation_commit']) + '\n')

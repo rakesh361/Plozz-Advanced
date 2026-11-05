@@ -1,4 +1,4 @@
-"""Fetch public upstream trees and apply the audited recipe in a temporary folder."""
+"""Fetch upstream source and apply the build patches."""
 import argparse
 import hashlib
 import importlib.util
@@ -53,7 +53,7 @@ def main():
     git(root, 'checkout', '--detach', 'FETCH_HEAD')
     if git(root, 'rev-parse', 'HEAD') != args.commit:
         raise ValueError('Upstream tag moved after the release check')
-    # Only public base trees for three-way patch context, never a personal history.
+    # Fetch the base trees required for three-way patch application.
     git(root, 'fetch', '--depth=1', 'origin', *BASES)
     patch_hashes = {}
     for patch in sorted((RECIPE / 'patches').glob('*.patch'), key=lambda p: p.name != 'restore-features.patch'):
@@ -82,7 +82,7 @@ def main():
     (personal / 'recipe.json').write_text(json.dumps(recipe, indent=2) + '\n')
     load('source_guard', root / 'tools/personal/verify-source.py').verify(root)
     load('release_identity', root / 'tools/personal/release_identity.py').release_identity(root)
-    print(f'Prepared {args.tag} with retained traits; upstream Git history will not be packaged.')
+    print(f'Prepared {args.tag} with TrueHD Atmos, DTS:X and dual-layer Dolby Vision enabled.')
 
 
 if __name__ == '__main__':

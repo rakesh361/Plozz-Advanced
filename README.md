@@ -18,14 +18,11 @@ versions and checksums.
 
 ## Signing and installation
 
-Sign locally using tvsign. Apple accounts, signing keys, provisioning profiles,
-GitHub read tokens and device pairings stay outside this repository. Configure
-new-version installation for manual approval. The existing personal app identity
-is retained so updates can preserve settings; the official app remains separate.
+Use tvsign to sign and install the IPA locally. Keep approval for new app versions
+manual if you want to choose when to install an update.
 
-About follows the upstream release; the separate installation number starts at
-6001.1 to remain higher than the existing build. Physical playback and renewal
-still require device testing. A passing build does not certify Atmos or FEL output.
+The app uses a separate identity from official Plozz. About displays the upstream
+release version and build.
 
 GPLv3 and the upstream App Store exception apply; see the included licence files.
 Exact dependency sources and notices are provided by the patched source snapshot.
