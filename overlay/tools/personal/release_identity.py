@@ -27,6 +27,8 @@ def release_identity(root=ROOT):
 
 def verify_bundle(info, root=ROOT):
     version, build = release_identity(root)
+    if info.get('PlozzPersonalBuild') is not True:
+        raise ValueError('Built personal app is missing its signing-independent identity marker')
     if info.get('CFBundleDisplayName') != 'Plozz Advanced':
         raise ValueError('Built personal app must be named Plozz Advanced')
     if (info.get('PlozzPersonalUpstreamVersion'), info.get('PlozzPersonalUpstreamBuild')) != (version, build):

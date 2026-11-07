@@ -1,5 +1,5 @@
 diff --git a/Sources/CoreModels/AppVersionIdentity.swift b/Sources/CoreModels/AppVersionIdentity.swift
-index 1ea060c68..7d70d615b 100644
+index 1ea060c..ec3dbdf 100644
 --- a/Sources/CoreModels/AppVersionIdentity.swift
 +++ b/Sources/CoreModels/AppVersionIdentity.swift
 @@ -6,10 +6,11 @@ public struct AppVersionIdentity: Equatable, Sendable {
@@ -16,7 +16,7 @@ index 1ea060c68..7d70d615b 100644
      }
  
      public static var current: Self {
-@@ -24,7 +25,15 @@ public struct AppVersionIdentity: Equatable, Sendable {
+@@ -24,7 +25,16 @@ public struct AppVersionIdentity: Equatable, Sendable {
          }
          marketingVersion = value("CFBundleShortVersionString") ?? "—"
          build = value("CFBundleVersion") ?? "—"
@@ -25,7 +25,8 @@ index 1ea060c68..7d70d615b 100644
 +        // monotonically increasing CFBundleVersion for in-place installation.
 +        let personalVersion = value("PlozzPersonalUpstreamVersion")
 +        let personalBuild = value("PlozzPersonalUpstreamBuild")
-+        let isPersonalRelease = value("CFBundleIdentifier") == "com.thatcube.Plozz.personal-advanced"
++        // Re-signing may rewrite CFBundleIdentifier. The build marker survives it.
++        let isPersonalRelease = infoDictionary["PlozzPersonalBuild"] as? Bool == true
 +            && personalVersion != nil && personalBuild != nil
 +        personalReleaseBuild = isPersonalRelease ? personalBuild : nil
 +        releaseVersion = isPersonalRelease ? personalVersion
@@ -34,10 +35,10 @@ index 1ea060c68..7d70d615b 100644
              ? value("PlozzDevelopmentFeature") : nil
      }
 diff --git a/Tests/CoreModelsTests/AppVersionIdentityTests.swift b/Tests/CoreModelsTests/AppVersionIdentityTests.swift
-index 81da59f52..41d53b844 100644
+index 81da59f..d25c845 100644
 --- a/Tests/CoreModelsTests/AppVersionIdentityTests.swift
 +++ b/Tests/CoreModelsTests/AppVersionIdentityTests.swift
-@@ -2,6 +2,41 @@ import XCTest
+@@ -2,6 +2,60 @@ import XCTest
  @testable import CoreModels
  
  final class AppVersionIdentityTests: XCTestCase {
@@ -47,6 +48,7 @@ index 81da59f52..41d53b844 100644
 +            "CFBundleShortVersionString": "2026.10.30",
 +            "CFBundleVersion": "4900.1",
 +            "PlozzDevelopmentFeature": "Personal advanced",
++            "PlozzPersonalBuild": true,
 +            "PlozzPersonalUpstreamVersion": "2026.11.3",
 +            "PlozzPersonalUpstreamBuild": "69.2"
 +        ])
@@ -57,17 +59,35 @@ index 81da59f52..41d53b844 100644
 +        XCTAssertEqual(identity.marketingVersion, "2026.10.30")
 +    }
 +
++    func testResignedPersonalReleaseKeepsUpstreamVersion() {
++        for identifier in ["com.thatcube.Plozz.personal-advanced", "com.resigned.Plozz.ABC123", ""] {
++            let identity = AppVersionIdentity(infoDictionary: [
++                "CFBundleIdentifier": identifier,
++                "CFBundleShortVersionString": "2026.11.6",
++                "CFBundleVersion": "6009.1",
++                "PlozzDevelopmentFeature": "Personal advanced",
++                "PlozzPersonalBuild": true,
++                "PlozzPersonalUpstreamVersion": "2026.11.6",
++                "PlozzPersonalUpstreamBuild": "71.1"
++            ])
++            XCTAssertEqual(identity.displayVersion, "71.1")
++            XCTAssertEqual(identity.displayBuild, "71.1")
++            XCTAssertEqual(identity.build, "6009.1")
++        }
++    }
++
 +    func testPersonalMetadataCannotRelabelOfficialAppOrIncompleteBuild() {
-+        for overrides in [
-+            ["CFBundleIdentifier": "com.thatcube.Plozz"],
++        for overrides: [String: Any] in [
++            ["PlozzPersonalBuild": false],
 +            ["PlozzPersonalUpstreamVersion": ""],
 +            ["PlozzPersonalUpstreamBuild": "$(PLOZZ_PERSONAL_UPSTREAM_BUILD)"]
 +        ] {
-+            let info = [
++            let info: [String: Any] = [
 +                "CFBundleIdentifier": "com.thatcube.Plozz.personal-advanced",
 +                "CFBundleShortVersionString": "2026.10.30",
 +                "CFBundleVersion": "4900.1",
-+                "PlozzPersonalUpstreamVersion": "2026.11.3",
++                "PlozzPersonalBuild": true,
++            "PlozzPersonalUpstreamVersion": "2026.11.3",
 +                "PlozzPersonalUpstreamBuild": "69.2"
 +            ].merging(overrides) { _, override in override }
 +            let identity = AppVersionIdentity(infoDictionary: info)
@@ -79,30 +99,8 @@ index 81da59f52..41d53b844 100644
      func testDevelopmentFeatureIsDisplayOnly() {
          let identity = AppVersionIdentity(infoDictionary: [
              "CFBundleShortVersionString": "2026.9.25",
-diff --git a/project.yml b/project.yml
-index ef5525b8e..04a34547f 100644
---- a/project.yml
-+++ b/project.yml
-@@ -121,6 +121,8 @@ targets:
-         PlozzReleaseID: "$(PLOZZ_RELEASE_ID)"
-         PlozzReleaseVersion: "$(PLOZZ_RELEASE_VERSION)"
-         PlozzDevelopmentFeature: "$(PLOZZ_DEV_FEATURE)"
-+        PlozzPersonalUpstreamVersion: "${PLOZZ_PERSONAL_UPSTREAM_VERSION}"
-+        PlozzPersonalUpstreamBuild: "${PLOZZ_PERSONAL_UPSTREAM_BUILD}"
-         # Background audio keeps music playing while the user browses other
-         # screens or the tvOS screensaver starts. Required for the music MVP's
-         # background/Now-Playing behaviour (AVAudioSession .playback).
-@@ -360,6 +362,8 @@ targets:
-         PlozzReleaseID: "$(PLOZZ_RELEASE_ID)"
-         PlozzReleaseVersion: "$(PLOZZ_RELEASE_VERSION)"
-         PlozzDevelopmentFeature: "$(PLOZZ_DEV_FEATURE)"
-+        PlozzPersonalUpstreamVersion: "${PLOZZ_PERSONAL_UPSTREAM_VERSION}"
-+        PlozzPersonalUpstreamBuild: "${PLOZZ_PERSONAL_UPSTREAM_BUILD}"
-         UILaunchScreen: {}
-         UIRequiresFullScreen: false
-         BGTaskSchedulerPermittedIdentifiers:
 diff --git a/tools/generate-project.sh b/tools/generate-project.sh
-index f60403473..1dab09eee 100755
+index f604034..1dab09e 100755
 --- a/tools/generate-project.sh
 +++ b/tools/generate-project.sh
 @@ -47,6 +47,8 @@ install_apple_build_lease_traps
@@ -123,3 +121,27 @@ index f60403473..1dab09eee 100755
        "PLOZZ_PAIRING_SERVICE_TYPE=${PLOZZ_PAIRING_SERVICE_TYPE}" \
        "PLOZZ_URL_SCHEME=${PLOZZ_URL_SCHEME}" \
        "PLOZZ_TV_APP_ENTITLEMENTS=${PLOZZ_TV_APP_ENTITLEMENTS}" \
+diff --git a/project.yml b/project.yml
+index baaa25a..c91a479 100644
+--- a/project.yml
++++ b/project.yml
+@@ -121,6 +121,9 @@ targets:
+         PlozzReleaseID: "$(PLOZZ_RELEASE_ID)"
+         PlozzReleaseVersion: "$(PLOZZ_RELEASE_VERSION)"
+         PlozzDevelopmentFeature: "$(PLOZZ_DEV_FEATURE)"
++        PlozzPersonalBuild: true
++        PlozzPersonalUpstreamVersion: "${PLOZZ_PERSONAL_UPSTREAM_VERSION}"
++        PlozzPersonalUpstreamBuild: "${PLOZZ_PERSONAL_UPSTREAM_BUILD}"
+         # Background audio keeps music playing while the user browses other
+         # screens or the tvOS screensaver starts. Required for the music MVP's
+         # background/Now-Playing behaviour (AVAudioSession .playback).
+@@ -360,6 +363,9 @@ targets:
+         PlozzReleaseID: "$(PLOZZ_RELEASE_ID)"
+         PlozzReleaseVersion: "$(PLOZZ_RELEASE_VERSION)"
+         PlozzDevelopmentFeature: "$(PLOZZ_DEV_FEATURE)"
++        PlozzPersonalBuild: true
++        PlozzPersonalUpstreamVersion: "${PLOZZ_PERSONAL_UPSTREAM_VERSION}"
++        PlozzPersonalUpstreamBuild: "${PLOZZ_PERSONAL_UPSTREAM_BUILD}"
+         UILaunchScreen: {}
+         UIRequiresFullScreen: false
+         BGTaskSchedulerPermittedIdentifiers:
