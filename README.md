@@ -12,6 +12,8 @@ and publishes a release only after those checks pass. Unchanged source and recip
 skip the macOS build. A failed patch or check stops publication and leaves the
 previous release available. **Actions → Plozz Advanced → Run workflow** performs
 the same check manually.
+Its optional upstream release field can rebuild an existing release for recipe
+changes; leave it blank to follow the newest upstream release.
 
 Each release includes the unsigned IPA, matching patched source, dependency
 versions and checksums.

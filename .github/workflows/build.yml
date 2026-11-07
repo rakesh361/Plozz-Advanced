@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '17 7 * * *'
   workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'Existing upstream release to rebuild (blank follows newest)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -28,6 +34,7 @@ jobs:
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
+          UPSTREAM_TAG: ${{ github.event.inputs.upstream_tag || '' }}
         run: python3 tools/check.py
 
   build:

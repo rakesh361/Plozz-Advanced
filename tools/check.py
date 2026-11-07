@@ -20,9 +20,11 @@ def api(path):
         return json.load(response)
 
 
-def select_release(releases):
+def select_release(releases, tag=None):
     candidates = [r for r in releases if not r['draft'] and
                   re.fullmatch(r'release/\d{3,4}(?:\.\d{1,2}){0,2}', r['tag_name'])]
+    if tag:
+        candidates = [r for r in candidates if r['tag_name'] == tag]
     if not candidates:
         raise ValueError('No published numbered Plozz release found')
     return max(candidates, key=lambda r: tuple(map(int, r['tag_name'].split('/')[1].split('.'))))
@@ -39,7 +41,8 @@ def already_published(releases, upstream_commit, recipe_commit):
 
 
 def main():
-    release = select_release(api(f'repos/{UPSTREAM}/releases?per_page=100'))
+    release = select_release(api(f'repos/{UPSTREAM}/releases?per_page=100'),
+                             os.environ.get('UPSTREAM_TAG', '').strip())
     tag = release['tag_name']
     sha = api(f'repos/{UPSTREAM}/commits/{urllib.parse.quote(tag, safe="")}')['sha']
     recipe = os.environ['GITHUB_SHA']

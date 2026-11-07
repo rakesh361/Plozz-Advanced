@@ -4,7 +4,7 @@ if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]
   export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 fi
 export PLOZZ_ID_SUFFIX='.personal-advanced'
-export PLOZZ_NAME_SUFFIX=' Personal'
+export PLOZZ_NAME_SUFFIX=' Advanced'
 export PLOZZ_TV_APP_ENTITLEMENTS='App/Resources/Plozz.branded.entitlements'
 export PLOZZ_TV_TOPSHELF_ENTITLEMENTS='TopShelf/TopShelf.branded.entitlements'
 export PLOZZ_IOS_APP_ENTITLEMENTS='App/PlozziOS/PlozziOS.branded.entitlements'

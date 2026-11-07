@@ -49,12 +49,24 @@ class ReleaseIdentityTests(unittest.TestCase):
 
     def test_packaging_rejects_missing_or_stale_display_identity(self):
         for info in [{}, {'PlozzPersonalUpstreamVersion': '2026.11.4', 'PlozzPersonalUpstreamBuild': '70'}]:
+            info['CFBundleDisplayName'] = 'Plozz Advanced'
             with self.assertRaisesRegex(ValueError, 'does not display'):
                 identity.verify_bundle(info, self.root)
         self.assertEqual(identity.verify_bundle({
+            'CFBundleDisplayName': 'Plozz Advanced',
             'PlozzPersonalUpstreamVersion': '2026.11.3', 'PlozzPersonalUpstreamBuild': '69.2',
             'CFBundleVersion': '4900.1',
         }, self.root), ('2026.11.3', '69.2'))
+
+    def test_packaging_rejects_old_or_missing_app_name(self):
+        for name in [None, 'Plozz Personal', 'Plozz']:
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, 'must be named Plozz Advanced'):
+                    identity.verify_bundle({
+                        'CFBundleDisplayName': name,
+                        'PlozzPersonalUpstreamVersion': '2026.11.3',
+                        'PlozzPersonalUpstreamBuild': '69.2',
+                    }, self.root)
 
 
 if __name__ == '__main__':
