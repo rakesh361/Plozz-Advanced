@@ -21,6 +21,20 @@ class RecipeTests(unittest.TestCase):
     def test_missing_release_fails_closed(self):
         with self.assertRaises(ValueError): select_release([])
 
+    def test_explicit_rebuild_keeps_selected_upstream_release(self):
+        releases = [{'tag_name': t, 'draft': False}
+                    for t in ['release/070.1', 'release/071.1']]
+        self.assertEqual(select_release(releases)['tag_name'], 'release/071.1')
+        self.assertEqual(select_release(releases, 'release/070.1')['tag_name'], 'release/070.1')
+
+    def test_rebuild_cannot_select_missing_draft_or_invalid_tag(self):
+        releases = [{'tag_name': 'release/070.1', 'draft': False},
+                    {'tag_name': 'release/071.1', 'draft': True},
+                    {'tag_name': 'experiment/072', 'draft': False}]
+        for tag in ['release/069', 'release/071.1', 'experiment/072']:
+            with self.subTest(tag=tag), self.assertRaises(ValueError):
+                select_release(releases, tag)
+
     def published(self):
         return [{'draft': False, 'body': marker('a'*40, 'b'*40),
                  'assets': [{'name': a} for a in ASSETS]}]

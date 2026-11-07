@@ -27,6 +27,8 @@ def release_identity(root=ROOT):
 
 def verify_bundle(info, root=ROOT):
     version, build = release_identity(root)
+    if info.get('CFBundleDisplayName') != 'Plozz Advanced':
+        raise ValueError('Built personal app must be named Plozz Advanced')
     if (info.get('PlozzPersonalUpstreamVersion'), info.get('PlozzPersonalUpstreamBuild')) != (version, build):
         raise ValueError('Built personal app does not display the accepted upstream release')
     return version, build
