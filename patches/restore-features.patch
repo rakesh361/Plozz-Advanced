@@ -41,16 +41,9 @@ index ef597663e..b2a2f0bab 100644
  ## FFmpeg license facts
  
 diff --git a/Package.resolved b/Package.resolved
-index 92c1ccbbc..8b612fa2e 100644
+index 2b7a433d1..dc85c673d 100644
 --- a/Package.resolved
 +++ b/Package.resolved
-@@ -1,5 +1,5 @@
- {
--  "originHash" : "d2760b05e6cd40e764a18d32edc67a265471ca69f94b5361fb174a0cc4495f99",
-+  "originHash" : "43d7109745c75a615b2c8b983c8c1c76aa27749fb0e011aba209b91be768a3ca",
-   "pins" : [
-     {
-       "identity" : "aetherengine",
 @@ -27,6 +27,15 @@
          "version" : "2.1.0"
        }
@@ -68,7 +61,7 @@ index 92c1ccbbc..8b612fa2e 100644
        "identity" : "sentry-apple-binaries",
        "kind" : "remoteSourceControl",
 diff --git a/Package.swift b/Package.swift
-index 1b01d96ff..ffba48929 100644
+index 41dc3fa6b..7839ba95e 100644
 --- a/Package.swift
 +++ b/Package.swift
 @@ -226,7 +226,8 @@ let package = Package(
@@ -90,10 +83,10 @@ index 1b01d96ff..ffba48929 100644
          // New host-controlled Now Playing and background retention remain opt-in.
          // 7.51.0 includes route-selected lossless PCM spatial beds from 7.50.0.
          // The fork retains Plozz's timing, subtitle, diagnostics and linkage fixes.
-@@ -250,11 +251,14 @@ let package = Package(
+@@ -252,11 +253,14 @@ let package = Package(
          .package(
              url: "https://github.com/brandomoore/AetherEngine",
-             revision: "7cd91ee1a55401d59ca385e247a5c6308b7d27ea",
+             revision: "8c7f919a4cff9f0d27d27f464657578ec08fc221",
 -            traits: []
 +            traits: [
 +                "TrueHDObjectAudio", "DTSXObjectAudio",
@@ -125,10 +118,10 @@ index db31cd637..d9b70062a 100644
  - **Change versions without leaving the player** — switch between files or
    editions on the active server on Apple TV, iPhone, and iPad. Keep your
 diff --git a/Sources/AppShelliOS/PlozziOSSettingsView.swift b/Sources/AppShelliOS/PlozziOSSettingsView.swift
-index d43db6497..5652f2ceb 100644
+index 54fcfb304..ab501069f 100644
 --- a/Sources/AppShelliOS/PlozziOSSettingsView.swift
 +++ b/Sources/AppShelliOS/PlozziOSSettingsView.swift
-@@ -1493,7 +1493,7 @@ private struct PlozziOSSettingsSearchDestination: View {
+@@ -1500,7 +1500,7 @@ private struct PlozziOSSettingsSearchDestination: View {
          switch entry.destinationPage(on: UIDevice.current.userInterfaceIdiom == .phone ? .phone : .tablet) {
          case .playback: profilePage(.playback)
          case .playbackAdvanced:
@@ -137,19 +130,19 @@ index d43db6497..5652f2ceb 100644
          case .streamingAdvanced:
              if appModel.accountsProviders.resolvedActiveAccounts.contains(where: {
                  $0.provider is any StreamingQualityProviding
-@@ -2695,8 +2695,10 @@ struct PlozziOSPlaybackSettingsView: View {
-             SettingsSectionGroup("Audio") {
-                 LosslessAudioControl()
-                     .settingsSearchAnchor("lossless-audio")
+@@ -2696,8 +2696,10 @@ struct PlozziOSPlaybackSettingsView: View {
+                 Text("Shows the song playing in a movie or show in the player’s Info, using Shazam. Needs an internet connection.")
+                     .settingsHelperText()
+                     .fixedSize(horizontal: false, vertical: true)
 +                SpatialAudioControl(isOn: $model.settings.trueHDAtmosEnabled)
 +                    .settingsSearchAnchor("spatial-audio")
              }
--            .settingsSearchGroup(["lossless-audio"])
-+            .settingsSearchGroup(["lossless-audio", "spatial-audio"])
+-            .settingsSearchGroup(["lossless-audio", "identify-songs"])
++            .settingsSearchGroup(["lossless-audio", "identify-songs", "spatial-audio"])
              SettingsSectionGroup {
                  Button { showsAdvancedPlayback = true } label: {
                      SettingsDisclosureLabel { Text("Advanced") }
-@@ -2714,7 +2716,7 @@ struct PlozziOSPlaybackSettingsView: View {
+@@ -2715,7 +2717,7 @@ struct PlozziOSPlaybackSettingsView: View {
              PlozziOSAdvancedStreamingSettings(settings: $model.settings.streaming, support: streamingSupport)
          }
          .navigationDestination(isPresented: $showsAdvancedPlayback) {
@@ -173,7 +166,7 @@ index 3749badad..77ea6a776 100644
      /// language cannot match because every audio track is untagged. Language
      /// matching remains authoritative whenever tags exist; this deterministic
 diff --git a/Sources/CoreModels/PlaybackSettings.swift b/Sources/CoreModels/PlaybackSettings.swift
-index dcebe68a6..78311a1cc 100644
+index 9ed15bf64..c12d998a2 100644
 --- a/Sources/CoreModels/PlaybackSettings.swift
 +++ b/Sources/CoreModels/PlaybackSettings.swift
 @@ -160,6 +160,14 @@ public struct PlaybackSettings: Codable, Equatable, Sendable {
@@ -191,7 +184,7 @@ index dcebe68a6..78311a1cc 100644
      /// Remember the chosen **audio language** per series: switching audio on any
      /// episode makes that language stick for every other episode of that series
      /// (per profile). Stored by language, re-resolved to a concrete track per
-@@ -206,6 +214,8 @@ public struct PlaybackSettings: Codable, Equatable, Sendable {
+@@ -217,6 +225,8 @@ public struct PlaybackSettings: Codable, Equatable, Sendable {
          showUpNextCard: Bool = true,
          upNextLeadSeconds: Int = 30,
          audioLanguagePreference: AudioLanguagePreference = .original,
@@ -199,8 +192,8 @@ index dcebe68a6..78311a1cc 100644
 +        dolbyVisionFELEnabled: Bool = false,
          rememberAudioTrackPerSeries: Bool = true,
          rememberSubtitleTrackPerSeries: Bool = true,
-         fadeOnDynamicRangeChange: Bool = true,
-@@ -243,6 +253,8 @@ public struct PlaybackSettings: Codable, Equatable, Sendable {
+         identifySongs: Bool = true,
+@@ -260,6 +270,8 @@ public struct PlaybackSettings: Codable, Equatable, Sendable {
          self.showUpNextCard = showUpNextCard
          self.upNextLeadSeconds = upNextLeadSeconds
          self.audioLanguagePreference = audioLanguagePreference
@@ -208,8 +201,8 @@ index dcebe68a6..78311a1cc 100644
 +        self.dolbyVisionFELEnabled = dolbyVisionFELEnabled
          self.rememberAudioTrackPerSeries = rememberAudioTrackPerSeries
          self.rememberSubtitleTrackPerSeries = rememberSubtitleTrackPerSeries
-         self.fadeOnDynamicRangeChange = fadeOnDynamicRangeChange
-@@ -417,6 +429,8 @@ public extension PlaybackSettings {
+         self.identifySongs = identifySongs
+@@ -440,6 +452,8 @@ public extension PlaybackSettings {
          case showUpNextCard
          case upNextLeadSeconds
          case audioLanguagePreference
@@ -218,7 +211,7 @@ index dcebe68a6..78311a1cc 100644
          /// Legacy boolean predecessor of `audioLanguagePreference`, still read for
          /// migration (`true` → `.original`, `false` → `.device`).
          case preferOriginalLanguageAudio
-@@ -441,7 +455,7 @@ public extension PlaybackSettings {
+@@ -470,7 +484,7 @@ public extension PlaybackSettings {
      /// `resumeRewindInterval` defaults to `.five` when absent — the maintainer
      /// wants the resume-rewind nudge on for upgrading installs too, not just fresh
      /// ones (`.off` is available for anyone who prefers exact resume).
@@ -227,7 +220,7 @@ index dcebe68a6..78311a1cc 100644
      init(from decoder: Decoder) throws {
          let container = try decoder.container(keyedBy: CodingKeys.self)
          let defaults = PlaybackSettings.default
-@@ -546,6 +560,12 @@ public extension PlaybackSettings {
+@@ -575,6 +589,12 @@ public extension PlaybackSettings {
          } else {
              self.audioLanguagePreference = defaults.audioLanguagePreference
          }
@@ -240,7 +233,7 @@ index dcebe68a6..78311a1cc 100644
          self.rememberAudioTrackPerSeries =
              (try? container.decodeIfPresent(Bool.self, forKey: .rememberAudioTrackPerSeries))
              .flatMap { $0 } ?? defaults.rememberAudioTrackPerSeries
-@@ -604,6 +624,8 @@ public extension PlaybackSettings {
+@@ -651,6 +671,8 @@ public extension PlaybackSettings {
          try container.encode(showUpNextCard, forKey: .showUpNextCard)
          try container.encode(upNextLeadSeconds, forKey: .upNextLeadSeconds)
          try container.encode(audioLanguagePreference, forKey: .audioLanguagePreference)
@@ -248,9 +241,9 @@ index dcebe68a6..78311a1cc 100644
 +        try container.encode(dolbyVisionFELEnabled, forKey: .dolbyVisionFELEnabled)
          try container.encode(rememberAudioTrackPerSeries, forKey: .rememberAudioTrackPerSeries)
          try container.encode(rememberSubtitleTrackPerSeries, forKey: .rememberSubtitleTrackPerSeries)
-         try container.encode(fadeOnDynamicRangeChange, forKey: .fadeOnDynamicRangeChange)
+         try container.encode(identifySongs, forKey: .identifySongs)
 diff --git a/Sources/CoreModels/PlozzAttributions.swift b/Sources/CoreModels/PlozzAttributions.swift
-index 7d42ed36a..beb4b845b 100644
+index ba1ed3321..677d4104e 100644
 --- a/Sources/CoreModels/PlozzAttributions.swift
 +++ b/Sources/CoreModels/PlozzAttributions.swift
 @@ -102,8 +102,7 @@ public enum PlozzAttributions {
@@ -277,20 +270,20 @@ index 931de0cc8..eccfe7e2e 100644
          "com.plozz.appTheme",
          ThemeSettingsStore.gradientStorageKey,
 diff --git a/Sources/CoreModels/SettingsSearch.swift b/Sources/CoreModels/SettingsSearch.swift
-index 1f1914ccc..0cdd279ca 100644
+index 903d23d8b..645a47a3c 100644
 --- a/Sources/CoreModels/SettingsSearch.swift
 +++ b/Sources/CoreModels/SettingsSearch.swift
-@@ -419,6 +419,8 @@ public enum SettingsSearchCatalog {
-               keywords: "remember sound track language episodes"),
-         .init("lossless-audio", page: .playback, title: "Prefer lossless audio",
+@@ -432,6 +432,8 @@ public enum SettingsSearchCatalog {
                keywords: "sound surround compressed HDMI ARC receiver audio compatibility"),
+         .init("identify-songs", page: .playback, title: "Identify songs",
+               keywords: "shazam music song soundtrack what song is playing apple music"),
 +        .init("spatial-audio", page: .playback, title: "Spatial audio",
 +              keywords: "surround height overhead speakers immersive sound", minimumOSVersion: 26),
          .init("read-ahead", page: .playback, title: "Video buffer",
                keywords: "buffering streaming cache ahead slow network stuttering loading memory"),
          .init("live-buffer", page: .playback, title: "Live TV buffer",
 diff --git a/Sources/CoreModels/SettingsSearchAdditionalEntries.swift b/Sources/CoreModels/SettingsSearchAdditionalEntries.swift
-index ae798e72b..e3026e227 100644
+index eb8547b67..27e605a6f 100644
 --- a/Sources/CoreModels/SettingsSearchAdditionalEntries.swift
 +++ b/Sources/CoreModels/SettingsSearchAdditionalEntries.swift
 @@ -76,6 +76,10 @@ extension SettingsSearchCatalog {
@@ -317,10 +310,10 @@ index b934aa715..1491c37c1 100644
      public static let storageKey = "com.plozz.spatialAudioLayout"
      private static let logger = Logger(subsystem: "com.plozz.app", category: "settings")
 diff --git a/Sources/EnginePlozzigen/PlozzigenVideoEngine.swift b/Sources/EnginePlozzigen/PlozzigenVideoEngine.swift
-index 0635ddd66..ede474225 100644
+index 786164645..3fc959d4f 100644
 --- a/Sources/EnginePlozzigen/PlozzigenVideoEngine.swift
 +++ b/Sources/EnginePlozzigen/PlozzigenVideoEngine.swift
-@@ -386,6 +386,7 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+@@ -387,6 +387,7 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
      private let readAheadPreference: @MainActor () -> PlaybackReadAhead
      private let liveBufferPreference: @MainActor () -> LivePlaybackBuffer
      private let losslessAudioPreference: @MainActor () -> Bool
@@ -328,7 +321,7 @@ index 0635ddd66..ede474225 100644
      private var liveOutputPolicy = LiveChannelOutputPolicy()
      private var outputPolicyReload: Task<Void, Never>?
      private var outputLoadGeneration = UUID()
-@@ -417,7 +418,8 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+@@ -418,7 +419,8 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
          authenticatedHTTPResolver: (any AuthenticatedHTTPResourceResolving)? = nil,
          readAheadPreference: @escaping @MainActor () -> PlaybackReadAhead = { .default },
          liveBufferPreference: @escaping @MainActor () -> LivePlaybackBuffer = { .default },
@@ -338,7 +331,7 @@ index 0635ddd66..ede474225 100644
      ) throws {
          self.engine = try AEEngine()
          // Plozz owns its audio session, and on an E-AC-3/Atmos bitstream-passthrough route the HDMI sink
-@@ -430,6 +432,7 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+@@ -431,6 +433,7 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
          self.readAheadPreference = readAheadPreference
          self.liveBufferPreference = liveBufferPreference
          self.losslessAudioPreference = losslessAudioPreference
@@ -346,7 +339,7 @@ index 0635ddd66..ede474225 100644
          #if canImport(UIKit)
          let surface = AetherPlayerView()
          engine.bind(view: surface)
-@@ -882,6 +885,9 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+@@ -884,6 +887,9 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
          }
          let options = Self.onDemandLoadOptions(
              losslessAudioEnabled: losslessAudioPreference(),
@@ -356,7 +349,7 @@ index 0635ddd66..ede474225 100644
              outputPolicy: outputPolicy,
              readAhead: isLocalFile || request.suppressOrdinaryWatchReporting
                  ? .default : readAheadPreference()
-@@ -891,6 +897,9 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+@@ -893,6 +899,9 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
  
      nonisolated static func onDemandLoadOptions(
          losslessAudioEnabled: Bool = LosslessAudioSettingsStore.defaultEnabled,
@@ -366,18 +359,22 @@ index 0635ddd66..ede474225 100644
          outputPolicy: LiveChannelOutputPolicy = .init(),
          readAhead: PlaybackReadAhead = .default
      ) -> LoadOptions {
-@@ -899,7 +908,9 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+@@ -901,8 +910,12 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
              audioBridgeMode: losslessAudioEnabled ? .lossless : .surroundCompat
          )
          options.objectAudioRendering = .off
 -        options.preferDualLayerDolbyVision = false
+-        options.dolbyVisionHandling = .profile7BaseLayer
 +        options.preferDualLayerDolbyVision = dolbyVisionFELEnabled
 +            && outputPolicy.isAudible && !outputPolicy.sharesAudioSession
 +            && !outputPolicy.suppressesDisplayMatching
++        options.dolbyVisionHandling = outputPolicy.isAudible
++            && !outputPolicy.sharesAudioSession && !outputPolicy.suppressesDisplayMatching
++            ? .automatic : .profile7BaseLayer
          // Aether uses approximately four-second segments and clamps the maximum
          // to 2,700, retaining its free-space budget and producer backpressure.
          switch readAhead {
-@@ -912,10 +923,28 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
+@@ -915,10 +928,28 @@ public final class PlozzigenVideoEngine: VideoEngine, LiveChannelEngine {
          // Explicit durations may exceed the automatic 2 GiB cap. The engine still
          // clamps this request to its available-space limit and shared retention ledger.
          options.sessionCacheByteBudget = readAhead == .automatic ? nil : Int.max
@@ -407,12 +404,12 @@ index 0635ddd66..ede474225 100644
          httpHeaders: [String: String], url: URL? = nil,
          sourceFormat: PlozzigenLiveSourceProbe.Format? = nil
 diff --git a/Sources/FeaturePlayback/PlayerViewModel.swift b/Sources/FeaturePlayback/PlayerViewModel.swift
-index 9e31ce920..0cdfd84f7 100644
+index 9c90a3e86..0b5db358f 100644
 --- a/Sources/FeaturePlayback/PlayerViewModel.swift
 +++ b/Sources/FeaturePlayback/PlayerViewModel.swift
-@@ -1812,6 +1812,8 @@ public final class PlayerViewModel {
-     ) async {
+@@ -1880,6 +1880,8 @@ public final class PlayerViewModel {
          endTemporarySpeedBoost()
+         stopSongWatch()
          var request = request
 +        request.trueHDAtmosEnabled = playbackSettings.trueHDAtmosEnabled
 +        request.dolbyVisionFELEnabled = playbackSettings.dolbyVisionFELEnabled
@@ -420,10 +417,10 @@ index 9e31ce920..0cdfd84f7 100644
          let rangeLoadGeneration = dynamicRangeLoadGeneration
          controls.infoCard.chapters = MediaChapter.normalized(request.chapters, duration: request.item.runtime)
 diff --git a/Sources/FeaturePlayback/README.md b/Sources/FeaturePlayback/README.md
-index eae929ee6..124a85681 100644
+index 2ec4831f4..3aea731e7 100644
 --- a/Sources/FeaturePlayback/README.md
 +++ b/Sources/FeaturePlayback/README.md
-@@ -1024,19 +1024,23 @@ step, not the original recording's fidelity, resampling/downmixing, or the
+@@ -1126,19 +1126,23 @@ step, not the original recording's fidelity, resampling/downmixing, or the
  receiver's final output. In particular, stream-copy of a lossy source is not
  labelled lossless. The same shared rows follow live pipeline changes on both
  platforms, without changing audio selection or conversion behavior.
@@ -558,10 +555,10 @@ index db73ecb6d..e0440b3c7 100644
  }
  
 diff --git a/Sources/FeatureSettings/PreferenceDetailViews.swift b/Sources/FeatureSettings/PreferenceDetailViews.swift
-index 7a91941e1..1344122de 100644
+index 7ed184866..b05b0f63f 100644
 --- a/Sources/FeatureSettings/PreferenceDetailViews.swift
 +++ b/Sources/FeatureSettings/PreferenceDetailViews.swift
-@@ -700,7 +700,7 @@ struct PlaybackDetailView: View {
+@@ -691,7 +691,7 @@ struct PlaybackDetailView: View {
  
      private var advancedRows: [SettingsSplitRow] {
          [.page(id: "playback-advanced", title: "Advanced") {
@@ -570,20 +567,20 @@ index 7a91941e1..1344122de 100644
          }]
      }
  
-@@ -887,6 +887,8 @@ struct PlaybackDetailView: View {
-                 SettingsControlRows {
-                     LosslessAudioControl()
-                         .settingsSearchAnchor("lossless-audio")
+@@ -883,6 +883,8 @@ struct PlaybackDetailView: View {
+                     Text("Shows the song playing in a movie or show in the player’s Info, using Shazam. Needs an internet connection.")
+                         .settingsHelperText()
+                         .fixedSize(horizontal: false, vertical: true)
 +                    SpatialAudioControl(isOn: $playback.settings.trueHDAtmosEnabled)
 +                        .settingsSearchAnchor("spatial-audio")
                  }
              }
          ]
 diff --git a/Sources/FeatureSettings/README.md b/Sources/FeatureSettings/README.md
-index 1a3090b31..529473cb6 100644
+index 7076b55ce..6ef7b8f83 100644
 --- a/Sources/FeatureSettings/README.md
 +++ b/Sources/FeatureSettings/README.md
-@@ -258,7 +258,7 @@ Playback's **Prefer lossless audio** toggle uses one short helper:
+@@ -271,7 +271,7 @@ Playback's **Prefer lossless audio** toggle uses one short helper:
  **Turn off for surround sound over regular HDMI ARC, which requires compressed audio.**
  It defaults on for new and upgrading devices and is shared by Plozz
  profiles on that device, not synced to other audio setups. Off selects the
@@ -592,7 +589,7 @@ index 1a3090b31..529473cb6 100644
  
  Title navigation uses native page opening and closing. The former
  **Zoom when opening titles** setting is removed, and saved values are ignored.
-@@ -339,16 +339,24 @@ with schematic Home Screen previews. A slightly larger solid-white tile marks
+@@ -352,16 +352,24 @@ with schematic Home Screen previews. A slightly larger solid-white tile marks
  the focused app, without an icon. Posters stays the default; full-screen explains
  tvOS's swipe-up expansion and retains the same two item limits.
  
@@ -624,7 +621,7 @@ index 1a3090b31..529473cb6 100644
  
  **Remember audio language per series** stores only the selected language, not a
  specific audio track or format. Its label needs no explanatory footer.
-@@ -356,8 +364,8 @@ specific audio track or format. Its label needs no explanatory footer.
+@@ -369,8 +377,8 @@ specific audio track or format. Its label needs no explanatory footer.
  On TV, related control groups can share one section heading through
  `SettingsConnectedControlGroups`: an 8pt gap and tighter 8pt facing corners keep
  them connected, while the section's outer corners retain the standard radius.
@@ -635,7 +632,7 @@ index 1a3090b31..529473cb6 100644
  Autoplay switches share a group, separate from the Up Next card and its
  conditional timing control. These use the existing surfaces and native controls,
  without an enclosing card or changing the independent settings.
-@@ -394,13 +402,20 @@ profile-scoped and travel through settings transfer. Community-marker attributio
+@@ -407,13 +415,20 @@ profile-scoped and travel through settings transfer. Community-marker attributio
  and identifier sharing appear as a short caption attached to its switch, without
  a separate section footer.
  
@@ -664,10 +661,10 @@ index 1a3090b31..529473cb6 100644
  
  Playback > Advanced > External player is a device-only, default-off preference
 diff --git a/Sources/FeatureSettings/SettingsView.swift b/Sources/FeatureSettings/SettingsView.swift
-index 01473a82d..752491ad3 100644
+index 549d9035c..0802dd4a9 100644
 --- a/Sources/FeatureSettings/SettingsView.swift
 +++ b/Sources/FeatureSettings/SettingsView.swift
-@@ -893,7 +893,7 @@ public struct SettingsView: View {
+@@ -894,7 +894,7 @@ public struct SettingsView: View {
                  searchPageID: page == .theme ? "theme" : "cards"
              )
          case .playback: authorizedDestination(for: .playback)
@@ -979,7 +976,7 @@ index 9df67ad69..5322b4be3 100644
      }
  }
 diff --git a/Tests/EnginePlozzigenTests/AetherReleaseIntegrationTests.swift b/Tests/EnginePlozzigenTests/AetherReleaseIntegrationTests.swift
-index 39e58d1d5..d90e634ed 100644
+index bf70d8126..93198fa01 100644
 --- a/Tests/EnginePlozzigenTests/AetherReleaseIntegrationTests.swift
 +++ b/Tests/EnginePlozzigenTests/AetherReleaseIntegrationTests.swift
 @@ -38,6 +38,19 @@ final class AetherReleaseIntegrationTests: XCTestCase {
@@ -1002,14 +999,14 @@ index 39e58d1d5..d90e634ed 100644
      func testEngineLivesInItsOwnDynamicFramework() {
          let engineBundle = Bundle(for: AetherEngine.self)
          XCTAssertEqual(engineBundle.bundleURL.lastPathComponent, "AetherEngine.framework")
-@@ -87,33 +100,36 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+@@ -87,33 +100,37 @@ final class AetherReleaseIntegrationTests: XCTestCase {
          XCTAssertEqual(diagnostics.audioEncodingDescription, "No re-encoding")
      }
  
--    func testOnDemandOptionsKeepStandardDolbyVisionAndAudioWithoutFEL() {
+-    func testOnDemandOptionsUseProfile7BaseLayerWithoutChangingAudio() {
 -        let options = PlozzigenVideoEngine.onDemandLoadOptions()
 -        XCTAssertFalse(options.preferDualLayerDolbyVision)
--        XCTAssertEqual(options.dolbyVisionHandling, .automatic)
+-        XCTAssertEqual(options.dolbyVisionHandling, .profile7BaseLayer)
 -        XCTAssertFalse(options.isLive)
 -        XCTAssertTrue(options.matchContentEnabled)
 -        XCTAssertEqual(options.audioBridgeMode, .lossless)
@@ -1049,14 +1046,15 @@ index 39e58d1d5..d90e634ed 100644
 +                request.dolbyVisionFELEnabled = enabled
                  let options = engine.onDemandLoadOptions(for: request)
 -                XCTAssertFalse(options.preferDualLayerDolbyVision)
--                XCTAssertEqual(options.dolbyVisionHandling, .automatic)
+-                XCTAssertEqual(options.dolbyVisionHandling, .profile7BaseLayer)
 -                XCTAssertEqual(options.objectAudioRendering, .off)
 +                XCTAssertEqual(options.preferDualLayerDolbyVision, enabled)
++                XCTAssertEqual(options.dolbyVisionHandling, .automatic)
 +                assertSpatialRendering(options, enabled: enabled)
              }
          }
      }
-@@ -129,18 +145,20 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+@@ -130,18 +147,20 @@ final class AetherReleaseIntegrationTests: XCTestCase {
          }
      }
  
@@ -1088,7 +1086,7 @@ index 39e58d1d5..d90e634ed 100644
              }
          }
      }
-@@ -152,7 +170,7 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+@@ -153,7 +172,7 @@ final class AetherReleaseIntegrationTests: XCTestCase {
              .init(isAudible: false, sharesAudioSession: true, suppressesDisplayMatching: true)
          ] {
              let options = PlozzigenVideoEngine.onDemandLoadOptions(
@@ -1097,7 +1095,7 @@ index 39e58d1d5..d90e634ed 100644
              )
              XCTAssertEqual(options.objectAudioRendering, .off)
              XCTAssertFalse(options.preferDualLayerDolbyVision)
-@@ -164,6 +182,7 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+@@ -166,6 +185,7 @@ final class AetherReleaseIntegrationTests: XCTestCase {
  
      func testDisplaySuppressedPreviewDoesNotRequestFEL() {
          let options = PlozzigenVideoEngine.onDemandLoadOptions(
@@ -1105,7 +1103,14 @@ index 39e58d1d5..d90e634ed 100644
              outputPolicy: .init(isAudible: true, suppressesDisplayMatching: true)
          )
          XCTAssertFalse(options.preferDualLayerDolbyVision)
-@@ -171,7 +190,7 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+@@ -185,13 +205,13 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+                 request.sourceMetadata = .init(
+                     video: .init(codec: "hevc", dolbyVisionProfile: profile))
+             }
+-            XCTAssertEqual(engine.onDemandLoadOptions(for: request).dolbyVisionHandling, .profile7BaseLayer)
++            XCTAssertEqual(engine.onDemandLoadOptions(for: request).dolbyVisionHandling, .automatic)
+         }
+     }
  
      func testTrueHDLegalCreditIncludesSourceAndBothLicenses() throws {
          let credit = try XCTUnwrap(PlozzAttributions.entries.first { $0.title == "LibTrueHD" })
@@ -1114,7 +1119,7 @@ index 39e58d1d5..d90e634ed 100644
          XCTAssertTrue(credit.detail.contains(
              "https://github.com/superuser404notfound/LibTrueHD/tree/3.1.0"
          ))
-@@ -181,6 +200,18 @@ final class AetherReleaseIntegrationTests: XCTestCase {
+@@ -201,6 +221,18 @@ final class AetherReleaseIntegrationTests: XCTestCase {
          XCTAssertEqual(Set(credit.licenses.map(\.label)), ["MIT", "Apache-2.0"])
      }
  
@@ -1289,10 +1294,10 @@ index 0fd922a56..b1a70f4a8 100644
          PlaybackRequest(item: MediaItem(id: "movie", title: "Fixture", kind: .movie),
                          streamURL: URL(string: "https://example.invalid/movie.mkv")!)
 diff --git a/Tests/FeaturePlaybackTests/PlayerViewModelEOFTests.swift b/Tests/FeaturePlaybackTests/PlayerViewModelEOFTests.swift
-index 1a45cacbd..1ead42650 100644
+index 95d730358..ec6af3b32 100644
 --- a/Tests/FeaturePlaybackTests/PlayerViewModelEOFTests.swift
 +++ b/Tests/FeaturePlaybackTests/PlayerViewModelEOFTests.swift
-@@ -1272,9 +1272,7 @@ final class PlayerViewModelEOFTests: XCTestCase {
+@@ -1342,9 +1342,7 @@ final class PlayerViewModelEOFTests: XCTestCase {
      func testLegacyAudioSettingsPreserveTrackPreferencesAcrossHandoff() async throws {
          for enabled in [false, true] {
              let settings = try JSONDecoder().decode(
@@ -1303,7 +1308,7 @@ index 1a45cacbd..1ead42650 100644
              )
              let (viewModel, engine, _) = makeViewModel(
                  playbackSettings: settings
-@@ -1291,6 +1289,25 @@ final class PlayerViewModelEOFTests: XCTestCase {
+@@ -1361,6 +1359,25 @@ final class PlayerViewModelEOFTests: XCTestCase {
          }
      }
  
@@ -1387,10 +1392,10 @@ index 4ab19fac4..5fdf61a97 100644
          }
      }
 diff --git a/Tests/FocusIntegrationTests/PlaybackSettingsHostedTests.swift b/Tests/FocusIntegrationTests/PlaybackSettingsHostedTests.swift
-index 017c2d17e..7545e4926 100644
+index c6f690324..73711c210 100644
 --- a/Tests/FocusIntegrationTests/PlaybackSettingsHostedTests.swift
 +++ b/Tests/FocusIntegrationTests/PlaybackSettingsHostedTests.swift
-@@ -114,9 +114,13 @@ final class PlaybackSettingsHostedTests: XCTestCase {
+@@ -156,9 +156,13 @@ final class PlaybackSettingsHostedTests: XCTestCase {
          for label in ["Prefer lossless audio", "regular HDMI ARC", "compressed audio"] {
              XCTAssertTrue(text.contains(label), text)
          }
@@ -1407,7 +1412,7 @@ index 017c2d17e..7545e4926 100644
          }
      }
  
-@@ -259,16 +263,19 @@ final class PlaybackSettingsHostedTests: XCTestCase {
+@@ -301,16 +305,19 @@ final class PlaybackSettingsHostedTests: XCTestCase {
          XCTAssertEqual(PlaybackSettingsStore(defaults: defaults).load(), .default)
      }
  
@@ -1429,7 +1434,7 @@ index 017c2d17e..7545e4926 100644
              .environment(\.settingsInWorkspace, true)
              .environment(\.themePalette, .dark)
              .environment(\.locale, Locale(identifier: "en_US"))
-@@ -284,16 +291,78 @@ final class PlaybackSettingsHostedTests: XCTestCase {
+@@ -326,16 +333,78 @@ final class PlaybackSettingsHostedTests: XCTestCase {
              defaults.removePersistentDomain(forName: suite)
          }
          try await Task.sleep(for: .milliseconds(400))
@@ -1516,7 +1521,7 @@ index 017c2d17e..7545e4926 100644
      }
  
      func testLibrarySourcesShowConfiguredNamesAndUpdateWithProfileSelection() async throws {
-@@ -436,7 +505,8 @@ final class PlaybackSettingsHostedTests: XCTestCase {
+@@ -478,7 +547,8 @@ final class PlaybackSettingsHostedTests: XCTestCase {
                  "Show Up Next card", "Time before the end",
                  "Skip intros, credits & more",
                  "Video buffer", "Live TV buffer", "Automatic", "temporary storage",
@@ -1526,7 +1531,7 @@ index 017c2d17e..7545e4926 100644
              ] {
                  XCTAssertTrue(visible.contains(label), "Missing inline control \(label): \(visible)")
              }
-@@ -450,9 +520,7 @@ final class PlaybackSettingsHostedTests: XCTestCase {
+@@ -492,9 +562,7 @@ final class PlaybackSettingsHostedTests: XCTestCase {
              XCTAssertFalse(visible.contains("The player closes when an episode finishes"), visible)
              XCTAssertFalse(visible.contains("Show a Skip button, or skip automatically"), visible)
              XCTAssertFalse(visible.contains("When your server has no intro or credits marker"), visible)
@@ -1581,10 +1586,10 @@ index da55f8b74..7002ab8ca 100644
      }
  }
 diff --git a/Tests/iOSPresentationTests/NativeSettingsToggleTests.swift b/Tests/iOSPresentationTests/NativeSettingsToggleTests.swift
-index 7d140168c..851ee9fb9 100644
+index 43eabd1c8..9d5b7cd92 100644
 --- a/Tests/iOSPresentationTests/NativeSettingsToggleTests.swift
 +++ b/Tests/iOSPresentationTests/NativeSettingsToggleTests.swift
-@@ -1126,7 +1126,7 @@ final class NativeSettingsToggleTests: XCTestCase {
+@@ -1186,7 +1186,7 @@ final class NativeSettingsToggleTests: XCTestCase {
          }
      }
  
@@ -1593,7 +1598,7 @@ index 7d140168c..851ee9fb9 100644
          let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
              .first { $0.activationState == .foregroundActive })
          let previous = scene.windows.first(where: \.isKeyWindow)
-@@ -1139,13 +1139,15 @@ final class NativeSettingsToggleTests: XCTestCase {
+@@ -1199,13 +1199,15 @@ final class NativeSettingsToggleTests: XCTestCase {
              previous?.makeKeyAndVisible()
              defaults.removePersistentDomain(forName: suite)
          }
@@ -1610,7 +1615,7 @@ index 7d140168c..851ee9fb9 100644
                  }
                  .environment(\.colorScheme, scheme)
                  .environment(\.themePalette, scheme == .dark ? .dark : .light)
-@@ -1153,19 +1155,92 @@ final class NativeSettingsToggleTests: XCTestCase {
+@@ -1213,19 +1215,92 @@ final class NativeSettingsToggleTests: XCTestCase {
                  window.makeKeyAndVisible()
                  try await settle(window)
                  let switches = listedSwitches(in: window)
@@ -1712,10 +1717,10 @@ index 7d140168c..851ee9fb9 100644
          }
      }
 diff --git a/docs/playback-engines.md b/docs/playback-engines.md
-index d48ea7470..c4731b6a1 100644
+index 71d14d89e..28e21edc3 100644
 --- a/docs/playback-engines.md
 +++ b/docs/playback-engines.md
-@@ -448,8 +448,8 @@ filling a large cushion.
+@@ -452,8 +452,8 @@ filling a large cushion.
  
  The 7.48.0 integration adds VP9 hardware decoding on supported devices, with a
  software fallback, and AV1 Dolby Vision Profile 10.1 metadata on the software
@@ -1726,7 +1731,7 @@ index d48ea7470..c4731b6a1 100644
  renderer now decodes the object presentation with matrix interpolation through
  LibTrueHD 3.1.0. This is spatial conversion, not lossless bitstream passthrough.
  FFmpegBuild advances to 3.10.1, including its libzvbi update and AAC/ALAC
-@@ -475,8 +475,8 @@ Plozz uses the new session-cache byte budget with its existing Video buffer
+@@ -479,8 +479,8 @@ Plozz uses the new session-cache byte budget with its existing Video buffer
  presets and exposes a separate Live TV buffer, both defaulting to Automatic.
  See [buffering contracts](../Sources/FeaturePlayback/README.md#on-demand-read-ahead)
  for route limits, temporary storage, safe-edge semantics and startup tradeoffs.
@@ -1737,7 +1742,7 @@ index d48ea7470..c4731b6a1 100644
  ASS/SSA packets with neither a decoded end nor a packet duration are now discarded
  instead of lingering for a fabricated five seconds. This also applies to sidecars;
  other subtitle codecs retain their established fallback. This upstream snapshot
-@@ -501,21 +501,14 @@ Upstream 7.44.0 replaced LibDTSX with FFmpeg's patched `dca` decoder.
+@@ -505,21 +505,14 @@ Upstream 7.44.0 replaced LibDTSX with FFmpeg's patched `dca` decoder.
  `DTSX.framework` and the retired LibDTSX notices are no longer shipped;
  existing FFmpeg notices remain.
  
@@ -1767,7 +1772,7 @@ index d48ea7470..c4731b6a1 100644
  
  The 7.23.0-to-7.34.1 range adds live-start/holdback and source-open recovery
  fixes, corrected software resume/seek timelines, transport-intent preservation
-@@ -529,7 +522,8 @@ spatial speaker positions and a tvOS spatial-output activator for receivers that
+@@ -533,7 +526,8 @@ spatial speaker positions and a tvOS spatial-output activator for receivers that
  It also includes live-replay recovery, software-video recovery after a screen lock,
  and the intervening 7.35.x playback fixes; these are upstream changes, not new
  Plozz-specific implementations. The current pin uses FFmpegBuild **3.11.1**
@@ -1777,7 +1782,7 @@ index d48ea7470..c4731b6a1 100644
  single-connection spatial-audio probe safeguards and system-composited Dolby Vision
  held pictures. The fork retains the persistent HTTP body-reader isolation
  correction from its previous integration.
-@@ -556,28 +550,56 @@ toggle's desired mode or the receiver's output.
+@@ -560,28 +554,56 @@ toggle's desired mode or the receiver's output.
  
  ### Spatial audio
  
@@ -1856,7 +1861,7 @@ index d48ea7470..c4731b6a1 100644
  
  The retained 7.23.0 audio-output
  flush epoch prevents a buffer decoded before a software seek from entering
-@@ -661,21 +683,40 @@ size probes. FFmpegBuild 3.4.x adds AV1 Dolby Vision sample-entry support.
+@@ -665,35 +687,43 @@ size probes. FFmpegBuild 3.4.x adds AV1 Dolby Vision sample-entry support.
  
  ## Dolby Vision FEL
  
@@ -1866,22 +1871,39 @@ index d48ea7470..c4731b6a1 100644
 -package trait is disabled. Legacy `dolbyVisionFELEnabled` values are ignored when
 -loading or transferring profile settings and omitted on the next save.
 -
--Normal Dolby Vision handling remains automatic. Profile 7 keeps the existing
--single-layer Profile 8.1 conversion where the display accepts Dolby Vision, or
--the HDR10 base layer otherwise; the enhancement layer is discarded. Other
--profiles' playback, ordinary audio paths, and native E-AC-3/JOC stream-copy are
--unchanged. Software still-image reshaping is separately disabled as described
--above. External players own their own decoding preferences.
+-Plozz selects `DolbyVisionHandling.profile7BaseLayer` for on-demand playback,
+-previews and engine-demuxed live playback. Both Profile 7 MEL and FEL play their
+-authored HDR10 base, without P7-to-8.1 RPU conversion or enhancement-layer
+-reconstruction. The engine classifies its demuxed source, including verified
+-record corrections, rather than trusting possibly missing or inaccurate provider
+-metadata. Its native remux uses plain `hvc1`, strips the Dolby configuration
+-record, omits Dolby supplemental codecs, and requests base-layer display criteria.
+-Source diagnostics can still identify Profile 7; output must not claim converted
+-Profile 8.1. RPU/EL NALs remain unconverted and are ignored by the base-layer decoder.
+-
+-This intentionally gives up Profile 7 dynamic metadata, including MEL, and FEL
+-residual detail. Supported single-layer Dolby Vision profiles, ordinary audio
+-paths, and native E-AC-3/JOC stream-copy remain unchanged. Software still-image
+-reshaping remains disabled. Direct remote HLS handed to AVPlayer, server
+-transcoding, and external players own their delivered format; this policy does not
+-rewrite those streams or infer their format from original-file metadata.
 -
 -Removing the optional reconstruction path does not establish licensing clearance
--for every remaining video or audio feature.
+-for every remaining video or audio feature. Avoiding P7 conversion reduces custom
+-processing; it does not remove all Dolby-related code from the distributed engine
+-or establish patent permission. Open-source licensing and Apple API availability
+-are not a substitute for reviewing the actual shipped implementation and applicable
+-third-party rights.
 +**Settings > Playback > Advanced > Dolby Vision FEL (experimental)** is off by
 +default, saved per profile, and applied to new built-in on-demand playback
 +sessions on tvOS and iOS/iPadOS. Existing profiles remain off, including older
 +or malformed stored values. Profile transfer carries the choice. The adapter
 +passes it through `LoadOptions.preferDualLayerDolbyVision`; it does not enable
 +FEL for live streams, shared players, muted previews or display-suppressed
-+previews. External players own their own decoding preferences.
++previews. Live playback and those previews retain upstream’s Profile 7 HDR10
++base-layer policy; normal on-demand playback uses automatic Dolby Vision
++handling so MEL conversion and optional FEL reconstruction remain available.
++External players own their own decoding preferences.
 +
 +The engine, not provider metadata, decides eligibility: seekable Profile 7 FEL,
 +automatic Dolby Vision handling, hardware HEVC decode and the engine's real-time
@@ -1912,7 +1934,7 @@ index d48ea7470..c4731b6a1 100644
  
  ## Remote AV1 Matroska startup
  
-@@ -900,11 +941,11 @@ retention assertions; they do not establish physical-device frame pacing.
+@@ -918,11 +948,11 @@ retention assertions; they do not establish physical-device frame pacing.
  | Feature | Plozzigen | Native |
  |---------|-----------|--------|
  | Dolby Vision | ✅ (Profile 5/8; optional dual-layer path, see above) | ✅ (if server delivers DV) |
@@ -1927,18 +1949,26 @@ index d48ea7470..c4731b6a1 100644
  | TrueHD bitstream | ❌ (channel audio uses FLAC/E-AC-3 bridge) | ❌ |
  
 diff --git a/project.yml b/project.yml
-index 487657d15..ef5525b8e 100644
+index 6ed6601e7..baaa25a2b 100644
 --- a/project.yml
 +++ b/project.yml
-@@ -644,7 +644,6 @@ targets:
-     platform: tvOS
-     sources:
-       - path: Tests/FocusIntegrationTests
+@@ -572,7 +572,6 @@ targets:
+       - path: Tests/CoreModelsTests/ContinueWatchingInPlayerSettingsTests.swift
+       - path: Tests/FeaturePlaybackTests/ContinueWatchingSelectionTests.swift
+       - path: Tests/CoreUITests/DetailInformationPreviewTests.swift
+-      - path: Tests/EnginePlozzigenTests/SpatialAudioLayoutPreferenceTests.swift
+       - path: Tests/FeaturePlaybackTests/NativePlaybackLifecycleTests.swift
+       - path: Tests/FeatureLiveTVCoreTests/LiveTVPlaybackCoordinatorTests.swift
+       - path: Tests/FeatureLiveTVTests/LiveTVGuideRowLayoutTests.swift
+@@ -655,7 +654,6 @@ targets:
+       - path: Tests/CoreModelsTests/ContinueWatchingInPlayerSettingsTests.swift
+       - path: Tests/FeaturePlaybackTests/ContinueWatchingSelectionTests.swift
+       - path: Tests/CoreUITests/DetailInformationPreviewTests.swift
 -      - path: Tests/EnginePlozzigenTests/SpatialAudioLayoutPreferenceTests.swift
        - path: Tests/HomePresentationSupport
        - path: Tests/TestSupportPerformance
        - path: Tests/PerformancePresentationSupport
-@@ -662,7 +661,6 @@ targets:
+@@ -673,7 +671,6 @@ targets:
        base:
          PRODUCT_BUNDLE_IDENTIFIER: com.thatcube.Plozz.FocusTests
          GENERATE_INFOPLIST_FILE: YES

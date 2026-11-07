@@ -11,7 +11,8 @@ from pathlib import Path
 
 RECIPE = Path(__file__).resolve().parents[1]
 UPSTREAM = 'https://github.com/brandomoore/Plozz.git'
-BASES = ['2f54d7b7481de4ffd06934392038bba6cb91f5c7',
+BASES = ['fd58fb87914311978247cad1153cf93ad3b941c8',
+         '2f54d7b7481de4ffd06934392038bba6cb91f5c7',
          '2f0e2d1282feb5141e6939209f84e9a31559296c',
          '8305fa78d70dbee37f91ad7aa0989c3a6eafb090',
          '736b565332183b231ba24a73ef6a2b684ba46726']
