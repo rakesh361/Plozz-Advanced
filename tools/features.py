@@ -103,6 +103,10 @@ def enable(root, engine_lock=None):
             tests = tests.replace(f'XCTAssertFalse(AetherEngine.OptionalComponent.{component}.isBuiltIn)',
                                   f'XCTAssertTrue(AetherEngine.OptionalComponent.{component}.isBuiltIn)')
         tests = tests.replace('testOptionalEngineComponentsAreExcluded', 'testOptionalEngineComponentsAreIncluded')
+        tests = tests.replace('testStillExtractionRequiresAnOrdinaryBaseLayer',
+                              'testStillExtractionSupportsDolbyVisionAndOrdinaryBaseLayers')
+        tests = tests.replace('XCTAssertFalse(FrameDecodeContext.yieldsStill(dolbyVisionNoBaseLayer: true))',
+                              'XCTAssertTrue(FrameDecodeContext.yieldsStill(dolbyVisionNoBaseLayer: true))')
         tests = tests.replace('credit.detail.contains("not linked in this build")',
                               'credit.detail.contains("is linked in this Advanced build")')
         path.write_text(tests)
