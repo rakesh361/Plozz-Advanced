@@ -34,21 +34,23 @@ def verify(root=ROOT):
         if not re.fullmatch('[a-f0-9]{40}', pins[identity]['state']['revision']):
             raise ValueError(f'{identity} must have an exact locked revision')
     checks = {
-        'Sources/CoreModels/PlaybackSettings.swift':
-            ['public var trueHDAtmosEnabled: Bool', 'public var dolbyVisionFELEnabled: Bool'],
-        'Sources/FeaturePlayback/PlayerViewModel.swift':
-            ['request.trueHDAtmosEnabled =', 'request.dolbyVisionFELEnabled ='],
+        'Sources/CoreModels/AdvancedPlaybackSettings.swift':
+            ['com.plozz.advanced.device.spatialAudio', 'com.plozz.advanced.device.dolbyVisionFEL'],
         'Sources/EnginePlozzigen/PlozzigenVideoEngine.swift':
-            ['trueHDAtmosEnabled: request.trueHDAtmosEnabled',
-             'dolbyVisionFELEnabled: request.dolbyVisionFELEnabled',
-             'options.preferDualLayerDolbyVision = dolbyVisionFELEnabled',
-             'options.objectAudioRendering = .render(spatialSpeakerLayout(spatialAudioLayout))'],
-        'Sources/FeatureSettings/SpatialAudioControl.swift': ['spatial-audio-toggle'],
-        'Sources/FeatureSettings/ExternalPlayerSettingsView.swift': ['dolbyVisionFELEnabled'],
-        'Tests/EnginePlozzigenTests/AetherReleaseIntegrationTests.swift':
-            ['trueHDObjectAudio.isBuiltIn', 'dtsxObjectAudio.isBuiltIn',
-             'OptionalComponent.dualLayerDolbyVision',
-             'testFELPreferenceReachesOnDemandOptionsWithoutDisablingAudioForOtherSources'],
+            ['advanced: advancedPlaybackPreference()',
+             'AdvancedPlaybackSettingsStore().load()',
+             'AdvancedPlaybackOptions.apply(advanced, policy: outputPolicy, to: &options)'],
+        'Sources/EnginePlozzigen/AdvancedPlaybackOptions.swift':
+            ['options.preferDualLayerDolbyVision = true',
+             'options.objectAudioRendering = .render',
+             '!options.isLive, policy.isAudible, !policy.sharesAudioSession'],
+        'Sources/FeatureSettings/AdvancedPlaybackControls.swift':
+            ['advanced-spatial-audio', 'advanced-dolby-vision-fel', 'advanced-spatial-layout',
+             '@AppStorage(AdvancedPlaybackSettingsStore.spatialKey)',
+             '@AppStorage(AdvancedPlaybackSettingsStore.felKey)'],
+        'Sources/FeatureSettings/ExternalPlayerSettingsView.swift': ['+ AdvancedPlaybackControls.rows'],
+        'Tests/EnginePlozzigenTests/AdvancedPlaybackTests.swift':
+            ['testDeviceChoicesReachActualEngineRequests', 'testRestrictedOutputsStayDisabled'],
     }
     for path, needles in checks.items():
         source = (root / path).read_text()

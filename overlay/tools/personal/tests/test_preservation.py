@@ -17,12 +17,12 @@ class PreservationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         for relative in ['Package.swift', 'Package.resolved', 'project.yml', 'personal/source.json',
-                         'Sources/CoreModels/PlaybackSettings.swift',
-                         'Sources/FeaturePlayback/PlayerViewModel.swift',
+                         'Sources/CoreModels/AdvancedPlaybackSettings.swift',
                          'Sources/EnginePlozzigen/PlozzigenVideoEngine.swift',
-                         'Sources/FeatureSettings/SpatialAudioControl.swift',
+                         'Sources/EnginePlozzigen/AdvancedPlaybackOptions.swift',
+                         'Sources/FeatureSettings/AdvancedPlaybackControls.swift',
                          'Sources/FeatureSettings/ExternalPlayerSettingsView.swift',
-                         'Tests/EnginePlozzigenTests/AetherReleaseIntegrationTests.swift']:
+                         'Tests/EnginePlozzigenTests/AdvancedPlaybackTests.swift']:
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / relative, target)
@@ -51,8 +51,8 @@ class PreservationTests(unittest.TestCase):
     def test_ui_toggle_without_runtime_wiring_is_rejected(self):
         path = self.root / 'Sources/EnginePlozzigen/PlozzigenVideoEngine.swift'
         path.write_text(path.read_text().replace(
-            'options.preferDualLayerDolbyVision = dolbyVisionFELEnabled',
-            'options.preferDualLayerDolbyVision = false'))
+            'AdvancedPlaybackOptions.apply(advanced, policy: outputPolicy, to: &options)',
+            '// Advanced hookup removed'))
         with self.assertRaisesRegex(ValueError, 'Playback preservation check failed'):
             guard.verify(self.root)
 

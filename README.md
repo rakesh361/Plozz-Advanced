@@ -6,14 +6,27 @@ Dolby Vision support retained.
 ## How it works
 
 One **Plozz Advanced** workflow checks upstream daily at 07:17 UTC. It downloads
-public upstream source into the temporary runner, applies the saved restoration
-and version-display patches, builds an unsigned tvOS IPA, runs scoped simulator tests,
+public upstream source into the temporary runner, enables the optional Aether components and adds device-local Advanced controls,
+then applies the version-display patch, builds an unsigned tvOS IPA, runs scoped simulator tests,
 and publishes a release only after those checks pass. Unchanged source and recipe
 skip the macOS build. A failed patch or check stops publication and leaves the
 previous release available. **Actions → Plozz Advanced → Run workflow** performs
 the same check manually.
 Its optional upstream release field can rebuild an existing release for recipe
 changes; leave it blank to follow the newest upstream release.
+
+## Advanced playback
+
+Open **Settings → Playback → Advanced** for Spatial audio, Rendering layout and
+experimental Dolby Vision FEL. These choices apply only to the current device,
+across all profiles, and take effect when playback is restarted. Spatial audio
+defaults on; experimental FEL defaults off. Settings are not transferred between
+devices with profiles.
+
+Plozz Advanced keeps the AetherEngine revision selected by upstream Plozz. Only
+the optional playback components and their runtime controls are enabled; source
+eligibility and fallback remain engine-owned. Unexpected integration changes stop
+publication and leave the previous release available.
 
 Each release includes the unsigned IPA, matching patched source, dependency
 versions and checksums.
