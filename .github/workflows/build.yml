@@ -71,7 +71,7 @@ jobs:
           python3 -c 'import os,sys; sys.path.insert(0,"tools"); from materialize import installation_build; print("PLOZZ_BUILD_NUMBER="+installation_build(os.environ["GITHUB_RUN_NUMBER"],os.environ["GITHUB_RUN_ATTEMPT"]))' >> "$GITHUB_ENV"
       - name: Build unsigned tvOS IPA
         run: bash work/source/tools/personal/build-tv.sh
-      - name: Test linked playback components and settings
+      - name: Test Advanced features and version display
         env:
           PLOZZ_LOG_DIR: ${{ github.workspace }}/work/source/.build/personal/simulator-logs
         run: bash work/source/tools/personal/test-tv.sh

@@ -8,13 +8,19 @@ Dolby Vision support retained.
 One **Plozz Advanced** workflow checks upstream every six hours, at 00:00, 06:00,
 12:00 and 18:00 UTC. GitHub may delay scheduled runs during busy periods. It downloads
 public upstream source into the temporary runner, enables the optional Aether components and adds device-local Advanced controls,
-then applies the version-display patch, builds an unsigned tvOS IPA, runs scoped simulator tests,
+then applies the version-display patch, builds an unsigned tvOS IPA, runs focused simulator tests,
 and publishes a release only after those checks pass. Unchanged source and recipe
 skip the macOS build. A failed patch or check stops publication and leaves the
 previous release available. **Actions → Plozz Advanced → Run workflow** performs
 the same check manually.
 Its optional upstream release field can rebuild an existing release for recipe
 changes; leave it blank to follow the newest upstream release.
+
+The release checks cover the Advanced components, playback options, device-local
+preferences, Advanced panel and version display. The complete Apple TV app must
+build, and its dependencies, bundled frameworks, identity and checksums are
+verified before publication. Unrelated upstream test suites are not part of this
+release gate.
 
 ## Advanced playback
 

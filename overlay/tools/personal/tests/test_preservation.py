@@ -22,7 +22,11 @@ class PreservationTests(unittest.TestCase):
                          'Sources/EnginePlozzigen/AdvancedPlaybackOptions.swift',
                          'Sources/FeatureSettings/AdvancedPlaybackControls.swift',
                          'Sources/FeatureSettings/ExternalPlayerSettingsView.swift',
-                         'Tests/EnginePlozzigenTests/AdvancedPlaybackTests.swift']:
+                         'Tests/PlozzAdvancedTests/AdvancedPlaybackTests.swift',
+                         'Tests/PlozzAdvancedTests/AdvancedPlaybackSettingsTests.swift',
+                         'Tests/PlozzAdvancedTests/AdvancedPlaybackControlsTests.swift',
+                         'Tests/PlozzAdvancedTests/AppVersionIdentityTests.swift',
+                         'tools/personal/test-tv.sh']:
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / relative, target)

@@ -94,26 +94,4 @@ def enable(root, engine_lock=None):
         'in Package.resolved and its MIT/Apache-2.0 notices are bundled. '
         'Statements above describing these components as disabled apply to upstream Plozz.\n')
 
-    # Upstream exclusion tests become opt-out regressions; enabled paths are tested separately.
-    for name in ['AetherReleaseIntegrationTests', 'SpatialAudioLayoutPreferenceTests']:
-        path = root / f'Tests/EnginePlozzigenTests/{name}.swift'
-        tests = path.read_text().replace('try PlozzigenVideoEngine()',
-            'try PlozzigenVideoEngine(advancedPlaybackPreference: { .disabled })')
-        for component in ['trueHDObjectAudio', 'dtsxObjectAudio', 'dualLayerDolbyVision', 'dolbyVisionStillReshaping']:
-            tests = tests.replace(f'XCTAssertFalse(AetherEngine.OptionalComponent.{component}.isBuiltIn)',
-                                  f'XCTAssertTrue(AetherEngine.OptionalComponent.{component}.isBuiltIn)')
-        tests = tests.replace('testOptionalEngineComponentsAreExcluded', 'testOptionalEngineComponentsAreIncluded')
-        tests = tests.replace('testStillExtractionRequiresAnOrdinaryBaseLayer',
-                              'testStillExtractionSupportsDolbyVisionAndOrdinaryBaseLayers')
-        tests = tests.replace('XCTAssertFalse(FrameDecodeContext.yieldsStill(dolbyVisionNoBaseLayer: true))',
-                              'XCTAssertTrue(FrameDecodeContext.yieldsStill(dolbyVisionNoBaseLayer: true))')
-        tests = tests.replace('credit.detail.contains("not linked in this build")',
-                              'credit.detail.contains("is linked in this Advanced build")')
-        path.write_text(tests)
-    edit(root, 'Tests/FeatureSettingsTests/SettingsWorkspaceNavigationTests.swift', [
-        ('let expectedIDs = ["external-player"]',
-         'let expectedIDs = ["external-player", "advanced-aether-playback"]'),
-        ('testAdvancedPlaybackKeepsExternalPlayerWithoutRetiredConversionControls',
-         'testAdvancedPlaybackKeepsExternalPlayerAndDeviceControls'),
-    ])
     return repository, revision

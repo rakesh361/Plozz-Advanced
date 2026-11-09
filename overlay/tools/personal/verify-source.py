@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail closed if an update drops traits, locked dependencies or runtime wiring.
 
-These are source guards. The existing AetherReleaseIntegrationTests assert the
+These are source guards. The focused AdvancedPlaybackTests assert the
 linked OptionalComponent values at runtime; only playback can prove rendering.
 """
 import json
@@ -26,6 +26,8 @@ def verify(root=ROOT):
         raise ValueError('Advanced playback traits missing from Package.swift')
     if repository != config['engine_repository'] or revision != config['engine_commit']:
         raise ValueError('Engine changed: review it and update personal/source.json explicitly')
+    if 'name: "PlozzAdvancedTests"' not in package:
+        raise ValueError('Focused Advanced simulator target missing')
     pins = json.loads((root / 'Package.resolved').read_text())['pins']
     pins = {pin['identity']: pin for pin in pins}
     if pins['aetherengine']['state']['revision'] != revision:
@@ -49,8 +51,15 @@ def verify(root=ROOT):
              '@AppStorage(AdvancedPlaybackSettingsStore.spatialKey)',
              '@AppStorage(AdvancedPlaybackSettingsStore.felKey)'],
         'Sources/FeatureSettings/ExternalPlayerSettingsView.swift': ['+ AdvancedPlaybackControls.rows'],
-        'Tests/EnginePlozzigenTests/AdvancedPlaybackTests.swift':
+        'Tests/PlozzAdvancedTests/AdvancedPlaybackTests.swift':
             ['testDeviceChoicesReachActualEngineRequests', 'testRestrictedOutputsStayDisabled'],
+        'Tests/PlozzAdvancedTests/AdvancedPlaybackSettingsTests.swift':
+            ['testDeviceStoresPersistIndependentlyAndIgnoreProfileFlags'],
+        'Tests/PlozzAdvancedTests/AdvancedPlaybackControlsTests.swift':
+            ['testDeviceControlsAreInAdvancedWithoutChangingExternalPlayerRows'],
+        'Tests/PlozzAdvancedTests/AppVersionIdentityTests.swift':
+            ['testResignedPersonalReleaseKeepsUpstreamVersion'],
+        'tools/personal/test-tv.sh': ['exec tools/run-tests.sh PlozzAdvancedTests'],
     }
     for path, needles in checks.items():
         source = (root / path).read_text()

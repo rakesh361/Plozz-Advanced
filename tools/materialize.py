@@ -33,6 +33,28 @@ def load(name, path):
     return module
 
 
+def add_focused_tests(root):
+    """Build our regression files in one target, leaving upstream suites intact."""
+    package_path = root / 'Package.swift'
+    package = package_path.read_text()
+    anchor = '    targets: ['
+    if package.count(anchor) != 1 or 'name: "PlozzAdvancedTests"' in package:
+        raise ValueError('Package test-target structure changed; review Advanced checks')
+    target = '''
+        .testTarget(
+            name: "PlozzAdvancedTests",
+            dependencies: [
+                "CoreModels", "EnginePlozzigen", "FeaturePlayback", "FeatureSettings",
+                .product(name: "AetherEngine", package: "AetherEngine"),
+            ],
+            path: "Tests/PlozzAdvancedTests"
+        ),'''
+    package_path.write_text(package.replace(anchor, anchor + target, 1))
+    # Version-display behavior is part of our patch, so retain its regression checks.
+    shutil.copy2(root / 'Tests/CoreModelsTests/AppVersionIdentityTests.swift',
+                 root / 'Tests/PlozzAdvancedTests/AppVersionIdentityTests.swift')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source', type=Path, required=True)
@@ -59,6 +81,7 @@ def main():
         git(root, 'apply', '--3way', '--index', str(patch))
     shutil.copytree(RECIPE / 'overlay', root, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('.DS_Store', '__pycache__'))
+    add_focused_tests(root)
     package = (root / 'Package.swift').read_text()
     engine = re.search(r'url: "https://github.com/([^"\s]+/AetherEngine)",\s*revision: "([a-f0-9]{40})"', package)
     if not engine:
@@ -73,6 +96,7 @@ def main():
     recipe = {'automation_repository': os.environ.get('GITHUB_REPOSITORY', 'local-validation'),
               'automation_commit': os.environ['GITHUB_SHA'], 'patches_sha256': patch_hashes,
               'source_history_included': False,
+              'simulator_test_target': 'PlozzAdvancedTests',
               'feature_hooks_sha256': hashlib.sha256((RECIPE / 'tools/features.py').read_bytes()).hexdigest()}
     (personal / 'recipe.json').write_text(json.dumps(recipe, indent=2) + '\n')
     load('source_guard', root / 'tools/personal/verify-source.py').verify(root)
