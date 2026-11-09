@@ -5,8 +5,8 @@ Dolby Vision support retained.
 
 ## How it works
 
-One **Plozz Advanced** workflow checks upstream every six hours, at 01:17, 07:17,
-13:17 and 19:17 UTC. GitHub may delay scheduled runs during busy periods. It downloads
+One **Plozz Advanced** workflow checks upstream every six hours, at 00:00, 06:00,
+12:00 and 18:00 UTC. GitHub may delay scheduled runs during busy periods. It downloads
 public upstream source into the temporary runner, enables the optional Aether components and adds device-local Advanced controls,
 then applies the version-display patch, builds an unsigned tvOS IPA, runs scoped simulator tests,
 and publishes a release only after those checks pass. Unchanged source and recipe
