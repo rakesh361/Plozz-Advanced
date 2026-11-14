@@ -69,6 +69,15 @@ jobs:
           tar --exclude=.git --exclude=.build --exclude=__pycache__ \
             -czf dist/Plozz-Advanced-source.tar.gz -C work/source .
           python3 -c 'import os,sys; sys.path.insert(0,"tools"); from materialize import installation_build; print("PLOZZ_BUILD_NUMBER="+installation_build(os.environ["GITHUB_RUN_NUMBER"],os.environ["GITHUB_RUN_ATTEMPT"]))' >> "$GITHUB_ENV"
+      - name: Prepare matching Apple TV simulator
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          cd work/source
+          source tools/personal/environment.sh
+          sdk="$(xcrun --sdk appletvsimulator --show-sdk-version)"
+          sim_id="$(python3 tools/select-ci-tvos-simulator.py --sdk-version "$sdk" --prepare)"
+          echo "PLOZZ_SIM_ID=$sim_id" >> "$GITHUB_ENV"
       - name: Build unsigned tvOS IPA
         run: bash work/source/tools/personal/build-tv.sh
       - name: Test Advanced features and version display
