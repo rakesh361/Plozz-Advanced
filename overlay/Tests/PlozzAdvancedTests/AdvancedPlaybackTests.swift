@@ -31,7 +31,8 @@ final class AdvancedPlaybackTests: XCTestCase {
                             request.sourceProvider = provider
                             let options = engine.onDemandLoadOptions(for: request)
                             XCTAssertEqual(options.preferDualLayerDolbyVision, fel)
-                            XCTAssertEqual(options.dolbyVisionHandling, fel ? .automatic : .profile7BaseLayer)
+                            XCTAssertFalse(options.foldsDolbyVisionFEL)
+                            XCTAssertEqual(options.dolbyVisionHandling, fel ? .automatic : .profile7MELOnly)
                             if #available(tvOS 26.0, iOS 26.0, *) {
                                 XCTAssertEqual(options.objectAudioRendering,
                                     spatial ? .render(AdvancedPlaybackOptions.speakerLayout(layout)) : .off)
@@ -52,7 +53,7 @@ final class AdvancedPlaybackTests: XCTestCase {
             let options = PlozzigenVideoEngine.onDemandLoadOptions(advanced: enabled, outputPolicy: policy)
             XCTAssertEqual(options.objectAudioRendering, .off)
             XCTAssertFalse(options.preferDualLayerDolbyVision)
-            XCTAssertEqual(options.dolbyVisionHandling, .profile7BaseLayer)
+            XCTAssertEqual(options.dolbyVisionHandling, .profile7MELOnly)
         }
         let preview = PlozzigenVideoEngine.onDemandLoadOptions(
             advanced: enabled, outputPolicy: .init(isAudible: true, suppressesDisplayMatching: true))

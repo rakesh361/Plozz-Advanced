@@ -3,7 +3,7 @@ import sys
 import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from features import TRAITS, enable_manifest, replace_once
+from features import TRAITS, enable_manifest, replace_once, decoder_pin
 
 
 class FeatureHookTests(unittest.TestCase):
@@ -31,3 +31,24 @@ class FeatureHookTests(unittest.TestCase):
         for source in ['removed', 'hook hook']:
             with self.assertRaises(ValueError):
                 replace_once(source, 'hook', 'enabled')
+
+
+class DecoderPinTests(unittest.TestCase):
+    def test_existing_engine_decoder_lock_is_preserved(self):
+        pin = {'identity': 'libtruehd', 'state': {'revision': 'a' * 40}}
+        self.assertEqual(decoder_pin({'pins': [pin]}, '', None), pin)
+
+    def test_disabled_trait_uses_declared_minor_floor_and_immutable_revision(self):
+        manifest = '.package(url: "https://github.com/owner/LibTrueHD", .upToNextMinor(from: "3.2.0"))'
+        calls = []
+        def resolve(repo, version):
+            calls.append((repo, version))
+            return 'b' * 40
+        pin = decoder_pin({'pins': []}, manifest, resolve)
+        self.assertEqual(calls, [('owner/LibTrueHD', '3.2.0')])
+        self.assertEqual(pin['state'], {'revision': 'b' * 40, 'version': '3.2.0'})
+        for source in ['', manifest + manifest, manifest.replace('upToNextMinor', 'upToNextMajor')]:
+            with self.assertRaises(ValueError):
+                decoder_pin({'pins': []}, source, resolve)
+        with self.assertRaises(ValueError):
+            decoder_pin({'pins': []}, manifest, lambda *args: 'main')
