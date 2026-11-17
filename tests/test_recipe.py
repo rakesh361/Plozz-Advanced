@@ -2,7 +2,7 @@ import sys
 import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from check import ASSETS, already_published, marker, select_release
+from check import ASSETS, advanced_version, already_published, marker, select_release
 from materialize import installation_build
 
 
@@ -45,6 +45,22 @@ class RecipeTests(unittest.TestCase):
     def test_new_source_or_recipe_requires_build(self):
         self.assertFalse(already_published(self.published(), 'c'*40, 'b'*40))
         self.assertFalse(already_published(self.published(), 'a'*40, 'c'*40))
+
+    def test_manual_advanced_patch_requires_its_own_release_but_schedules_keep_it(self):
+        releases = self.published()
+        releases[0]['name'] = 'Plozz Advanced 073'
+        self.assertFalse(already_published(releases, 'a'*40, 'b'*40, '073.1'))
+        releases[0]['name'] = 'Plozz Advanced 073.1'
+        self.assertTrue(already_published(releases, 'a'*40, 'b'*40, '073.1'))
+        self.assertTrue(already_published(releases, 'a'*40, 'b'*40))
+
+    def test_advanced_patch_label_cannot_impersonate_another_upstream_release(self):
+        self.assertEqual(advanced_version('release/073'), '073')
+        self.assertEqual(advanced_version('release/073', '073.1'), '073.1')
+        self.assertEqual(advanced_version('release/073.1', '073.1.2'), '073.1.2')
+        for label in ['074', '072.1', '073.0', '073.01', '073.1\nextra', '073.100']:
+            with self.subTest(label=label), self.assertRaises(ValueError):
+                advanced_version('release/073', label)
 
     def test_partial_or_draft_publication_retries(self):
         r = self.published(); r[0]['assets'].pop()

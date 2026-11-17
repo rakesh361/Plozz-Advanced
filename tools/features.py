@@ -8,7 +8,7 @@ import re
 import urllib.request
 
 TRAITS = ('TrueHDObjectAudio', 'DTSXObjectAudio', 'DualLayerDolbyVision',
-          'DolbyVisionStillReshaping')
+          'DolbyVisionStillReshaping', 'DolbyVisionFelCurves')
 
 
 def replace_once(source, old, new):
@@ -111,6 +111,10 @@ def enable(root, engine_lock=None):
         ('                .accessibilityIdentifier("playback-external-player")\n            }',
          '                .accessibilityIdentifier("playback-external-player")\n            }\n            SettingsSectionGroup("Advanced playback") { AdvancedPlaybackControls() }'),
     ])
+    edit(root, 'Sources/FeatureSettings/PreferenceDetailViews.swift', [
+        ('Approximates enhancement-layer brightness without full FEL reconstruction. Turn off to use HDR10.',
+         'Approximates enhancement-layer brightness, or uses full FEL reconstruction when enabled in Advanced. Turn off to use HDR10 for FEL videos.'),
+    ])
     decoder_version = decoder['state'].get('version')
     if not decoder_version or not re.fullmatch(r'\d+\.\d+\.\d+', decoder_version):
         raise ValueError('Expected a versioned LibTrueHD dependency for attribution')
@@ -125,8 +129,8 @@ def enable(root, engine_lock=None):
     notice_source = re.sub(r'(`github.com/[^`]+/AetherEngine` @ `)[a-f0-9]{40}',
                            lambda m: m[1] + revision, notice.read_text())
     notice.write_text(notice_source + '\n## Plozz Advanced build\n\n'
-        'This variant enables TrueHDObjectAudio, DTSXObjectAudio, DualLayerDolbyVision '
-        'and DolbyVisionStillReshaping. LibTrueHD is linked; its exact source is pinned '
+        'This variant enables TrueHDObjectAudio, DTSXObjectAudio, DualLayerDolbyVision, '
+        'DolbyVisionStillReshaping and DolbyVisionFelCurves. LibTrueHD is linked; its exact source is pinned '
         'in Package.resolved and its MIT/Apache-2.0 notices are bundled. '
         'Statements above describing these components as disabled apply to upstream Plozz.\n')
 

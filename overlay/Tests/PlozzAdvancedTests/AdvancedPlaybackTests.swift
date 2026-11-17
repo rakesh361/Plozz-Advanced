@@ -7,7 +7,8 @@ import XCTest
 final class AdvancedPlaybackTests: XCTestCase {
     func testAllOptionalComponentsAreActuallyLinked() {
         for component: AetherEngine.OptionalComponent in [
-            .trueHDObjectAudio, .dtsxObjectAudio, .dualLayerDolbyVision, .dolbyVisionStillReshaping
+            .trueHDObjectAudio, .dtsxObjectAudio, .dualLayerDolbyVision, .dolbyVisionStillReshaping,
+            .dolbyVisionFelCurves
         ] { XCTAssertTrue(component.isBuiltIn) }
     }
 
@@ -29,16 +30,17 @@ final class AdvancedPlaybackTests: XCTestCase {
                             var request = PlaybackRequest(
                                 item: MediaItem(id: "advanced", title: "Fixture", kind: .movie), streamURL: url)
                             request.sourceProvider = provider
-                            let options = engine.onDemandLoadOptions(for: request)
-                            XCTAssertEqual(options.preferDualLayerDolbyVision, fel)
-                            XCTAssertFalse(options.foldsDolbyVisionFEL)
-                            XCTAssertEqual(options.dolbyVisionHandling, fel ? .automatic : .profile7MELOnly)
-                            if #available(tvOS 26.0, iOS 26.0, *) {
-                                XCTAssertEqual(options.objectAudioRendering,
-                                    spatial ? .render(AdvancedPlaybackOptions.speakerLayout(layout)) : .off)
+                            for conversion in [false, true] {
+                                request.dolbyVisionFELConversion = conversion
+                                let options = engine.onDemandLoadOptions(for: request)
+                                assertFELPolicy(options, conversion: conversion, experimental: fel)
+                                if #available(tvOS 26.0, iOS 26.0, *) {
+                                    XCTAssertEqual(options.objectAudioRendering,
+                                        spatial ? .render(AdvancedPlaybackOptions.speakerLayout(layout)) : .off)
+                                }
+                                XCTAssertEqual(options.audioBridgeMode, .lossless)
+                                XCTAssertFalse(options.isLive)
                             }
-                            XCTAssertEqual(options.audioBridgeMode, .lossless)
-                            XCTAssertFalse(options.isLive)
                         }
                     }
                 }
@@ -46,23 +48,99 @@ final class AdvancedPlaybackTests: XCTestCase {
         }
     }
 
+    private func assertFELPolicy(_ options: LoadOptions, conversion: Bool, experimental: Bool,
+                                 file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(options.preferDualLayerDolbyVision, conversion && experimental, file: file, line: line)
+        XCTAssertEqual(options.foldsDolbyVisionFEL, conversion && !experimental, file: file, line: line)
+        XCTAssertEqual(options.dolbyVisionHandling,
+                       !conversion ? .profile7MELOnly : experimental ? .automatic : .profile7KnownLayers,
+                       file: file, line: line)
+    }
+
+    @MainActor
+    func testConversionChangesOnTheSameRequestSelectBothDirections() throws {
+        let engine = try PlozzigenVideoEngine(advancedPlaybackPreference: {
+            .init(spatialAudio: false, dolbyVisionFEL: false)
+        })
+        defer { engine.stop() }
+        var request = PlaybackRequest(
+            item: MediaItem(id: "conversion", title: "Fixture", kind: .movie),
+            streamURL: URL(string: "https://example.invalid/movie.mkv")!)
+        for conversion in [true, false, true] {
+            request.dolbyVisionFELConversion = conversion
+            assertFELPolicy(engine.onDemandLoadOptions(for: request), conversion: conversion, experimental: false)
+        }
+    }
+
+    @MainActor
+    func testConversionExclusionsAlsoPreventExperimentalReconstruction() throws {
+        let engine = try PlozzigenVideoEngine(advancedPlaybackPreference: {
+            .init(spatialAudio: false, dolbyVisionFEL: true)
+        })
+        defer { engine.stop() }
+        var request = PlaybackRequest(
+            item: MediaItem(id: "excluded", title: "Fixture", kind: .movie),
+            streamURL: URL(string: "https://example.invalid/movie.mkv")!)
+        request.dolbyVisionFELConversion = true
+        assertFELPolicy(engine.onDemandLoadOptions(for: request), conversion: true, experimental: true)
+        request.externalAudioURL = URL(string: "https://example.invalid/audio.m4a")!
+        assertFELPolicy(engine.onDemandLoadOptions(for: request), conversion: false, experimental: true)
+        request.externalAudioURL = nil
+        request.suppressOrdinaryWatchReporting = true
+        assertFELPolicy(engine.onDemandLoadOptions(for: request), conversion: false, experimental: true)
+        request.suppressOrdinaryWatchReporting = false
+        request.discPlayback = .openMenu
+        assertFELPolicy(engine.onDemandLoadOptions(for: request), conversion: false, experimental: true)
+    }
+
+    @MainActor
+    func testLinkedEngineConvertsKnownFELOnlyWhenEnabledAndPreservesMEL() throws {
+        let engine = try AetherEngine()
+        defer { engine.stop() }
+        for experimental in [false, true] {
+            for conversion in [false, true] {
+                let options = PlozzigenVideoEngine.onDemandLoadOptions(
+                    advanced: .init(spatialAudio: false, dolbyVisionFEL: experimental),
+                    dolbyVisionFELConversion: conversion)
+                for type in ["FEL", "MEL"] {
+                    engine.sourceDolbyVisionEnhancementLayerType = type
+                    XCTAssertEqual(engine.resolvedDolbyVisionHandling(
+                        options.dolbyVisionHandling, foldsFEL: options.foldsDolbyVisionFEL),
+                        conversion || type == "MEL" ? .automatic : .profile7BaseLayer)
+                }
+            }
+        }
+        engine.sourceDolbyVisionEnhancementLayerType = nil
+        XCTAssertEqual(engine.resolvedDolbyVisionHandling(.profile7KnownLayers, foldsFEL: true), .profile7BaseLayer)
+        // The off policy targets Profile 7 only; it is not the global baseLayerOnly policy.
+        let off = PlozzigenVideoEngine.onDemandLoadOptions(dolbyVisionFELConversion: false)
+        XCTAssertEqual(off.dolbyVisionHandling, .profile7MELOnly)
+    }
+
     func testRestrictedOutputsStayDisabled() {
         let enabled = AdvancedPlaybackSettings(spatialAudio: true, dolbyVisionFEL: true)
         for policy in [LiveChannelOutputPolicy(isAudible: false),
                        .init(isAudible: true, sharesAudioSession: true)] {
-            let options = PlozzigenVideoEngine.onDemandLoadOptions(advanced: enabled, outputPolicy: policy)
+            let options = PlozzigenVideoEngine.onDemandLoadOptions(
+                advanced: enabled, dolbyVisionFELConversion: true, outputPolicy: policy)
             XCTAssertEqual(options.objectAudioRendering, .off)
             XCTAssertFalse(options.preferDualLayerDolbyVision)
-            XCTAssertEqual(options.dolbyVisionHandling, .profile7MELOnly)
+            // Advanced must leave the upstream policy intact for these outputs.
+            XCTAssertTrue(options.foldsDolbyVisionFEL)
+            XCTAssertEqual(options.dolbyVisionHandling, .profile7KnownLayers)
         }
         let preview = PlozzigenVideoEngine.onDemandLoadOptions(
-            advanced: enabled, outputPolicy: .init(isAudible: true, suppressesDisplayMatching: true))
+            advanced: enabled, dolbyVisionFELConversion: true,
+            outputPolicy: .init(isAudible: true, suppressesDisplayMatching: true))
         XCTAssertFalse(preview.preferDualLayerDolbyVision)
+        XCTAssertTrue(preview.foldsDolbyVisionFEL)
         for suffix in ["ts", "m3u8"] {
             let live = PlozzigenVideoEngine.liveLoadOptions(
                 httpHeaders: [:], url: URL(string: "https://example.invalid/live.\(suffix)")!)
             XCTAssertEqual(live.objectAudioRendering, .off)
             XCTAssertFalse(live.preferDualLayerDolbyVision)
+            XCTAssertFalse(live.foldsDolbyVisionFEL)
+            XCTAssertEqual(live.dolbyVisionHandling, .profile7MELOnly)
         }
     }
 
@@ -71,7 +149,7 @@ final class AdvancedPlaybackTests: XCTestCase {
             for buffer in PlaybackReadAhead.allCases {
                 let options = PlozzigenVideoEngine.onDemandLoadOptions(
                     advanced: .init(spatialAudio: true, dolbyVisionFEL: true),
-                    losslessAudioEnabled: lossless, readAhead: buffer)
+                    losslessAudioEnabled: lossless, dolbyVisionFELConversion: true, readAhead: buffer)
                 XCTAssertEqual(options.audioBridgeMode, lossless ? .lossless : .surroundCompat)
                 XCTAssertEqual(options.sessionCacheByteBudget, buffer == .automatic ? nil : Int.max)
                 XCTAssertFalse(options.progressiveSegmentDelivery)

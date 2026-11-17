@@ -10,6 +10,11 @@ on:
         required: false
         default: ''
         type: string
+      advanced_version:
+        description: 'Optional Advanced patch label, e.g. 073.1 for upstream release/073'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -25,6 +30,7 @@ jobs:
       build: ${{ steps.release.outputs.build }}
       tag: ${{ steps.release.outputs.tag }}
       commit: ${{ steps.release.outputs.commit }}
+      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -35,6 +41,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           UPSTREAM_TAG: ${{ github.event.inputs.upstream_tag || '' }}
+          ADVANCED_VERSION: ${{ github.event.inputs.advanced_version || '' }}
         run: python3 tools/check.py
 
   build:
@@ -62,6 +69,7 @@ jobs:
         env:
           UPSTREAM_TAG: ${{ needs.check.outputs.tag }}
           UPSTREAM_COMMIT: ${{ needs.check.outputs.commit }}
+          ADVANCED_VERSION: ${{ needs.check.outputs.version }}
         run: |
           python3 tools/materialize.py --source work/source --tag "$UPSTREAM_TAG" --commit "$UPSTREAM_COMMIT"
           python3 -m unittest discover -s work/source/tools/personal/tests -v
@@ -127,6 +135,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           UPSTREAM_COMMIT: ${{ needs.check.outputs.commit }}
           UPSTREAM_TAG: ${{ needs.check.outputs.tag }}
+          ADVANCED_VERSION: ${{ needs.check.outputs.version }}
           RELEASE_TAG: advanced/build-${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -137,6 +146,7 @@ jobs:
           p = json.load(open('provenance.json'))
           assert p['automation_commit'] == os.environ['GITHUB_SHA']
           assert p['upstream_commit'] == os.environ['UPSTREAM_COMMIT']
+          assert p['advanced_version'] == os.environ['ADVANCED_VERSION']
           assert p['signed'] is False and p['source_history_included'] is False
           PY
           if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > draft-state 2>/dev/null; then
@@ -146,7 +156,7 @@ jobs:
             fi
           else
             gh release create "$RELEASE_TAG" --draft --target "$GITHUB_SHA" \
-              --title "Plozz Advanced ${UPSTREAM_TAG#release/}" --notes-file release-notes.md
+              --title "Plozz Advanced ${ADVANCED_VERSION}" --notes-file release-notes.md
           fi
           gh release upload "$RELEASE_TAG" --clobber \
             Plozz-Advanced-tvOS.ipa Plozz-Advanced-tvOS.ipa.sha256 \

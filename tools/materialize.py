@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 from features import enable, TRAITS
+from check import advanced_version
 from pathlib import Path
 
 RECIPE = Path(__file__).resolve().parents[1]
@@ -65,6 +66,7 @@ def main():
         raise ValueError('Unexpected upstream tag')
     if not re.fullmatch('[a-f0-9]{40}', args.commit):
         raise ValueError('Expected upstream commit SHA')
+    version = advanced_version(args.tag, os.environ.get('ADVANCED_VERSION', '').strip())
     root = args.source.resolve()
     root.mkdir(parents=True, exist_ok=False)
     git(root, 'init', '-b', 'upstream-source')
@@ -87,6 +89,7 @@ def main():
     if not engine:
         raise ValueError('Engine integration changed; recipe needs review')
     config = {'upstream_repository': 'brandomoore/Plozz', 'upstream_tag': args.tag,
+              'advanced_version': version,
               'upstream_commit': args.commit, 'engine_repository': engine[1],
               'engine_commit': engine[2], 'required_traits': sorted(TRAITS),
               'bundle_identifier': 'com.thatcube.Plozz.personal-advanced'}

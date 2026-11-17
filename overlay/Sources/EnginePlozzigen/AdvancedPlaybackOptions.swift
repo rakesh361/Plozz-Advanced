@@ -7,9 +7,10 @@ enum AdvancedPlaybackOptions {
     static func apply(_ settings: AdvancedPlaybackSettings,
                       policy: LiveChannelOutputPolicy, to options: inout LoadOptions) {
         guard !options.isLive, policy.isAudible, !policy.sharesAudioSession else { return }
-        // Advanced uses full dual-layer reconstruction for FEL.
-        options.foldsDolbyVisionFEL = false
-        if settings.dolbyVisionFEL && !policy.suppressesDisplayMatching {
+        // Keep upstream's approximation unless both conversion and reconstruction
+        // are enabled. The existing fold flag includes upstream's eligibility gates.
+        if options.foldsDolbyVisionFEL && settings.dolbyVisionFEL && !policy.suppressesDisplayMatching {
+            options.foldsDolbyVisionFEL = false
             options.preferDualLayerDolbyVision = true
             options.dolbyVisionHandling = .automatic
         }

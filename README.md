@@ -15,6 +15,8 @@ previous release available. **Actions → Plozz Advanced → Run workflow** perf
 the same check manually.
 Its optional upstream release field can rebuild an existing release for recipe
 changes; leave it blank to follow the newest upstream release.
+An optional Advanced patch label, such as `073.1` for `release/073`, changes the
+release title and in-app version while retaining the exact upstream source identity.
 
 The release checks cover the Advanced components, playback options, device-local
 preferences, Advanced panel and version display. The complete Apple TV app must
@@ -29,6 +31,16 @@ experimental Dolby Vision FEL. These choices apply only to the current device,
 across all profiles, and take effect when playback is restarted. Spatial audio
 defaults on; experimental FEL defaults off. Settings are not transferred between
 devices with profiles.
+
+For Profile 7 FEL videos, **P7 FEL → P8.1 conversion** in Playback settings is
+the master switch. With conversion on, experimental FEL on requests full
+reconstruction; experimental FEL off uses the official brightness approximation.
+With conversion off, FEL videos use HDR10 regardless of the experimental choice.
+Ordinary MEL and supported single-layer Dolby Vision playback remain unchanged.
+The conversion choice is per profile; experimental FEL is per device. The
+in-player conversion switch may be unavailable during experimental reconstruction.
+Experimental mode retains the engine's existing fallback if reconstruction is
+unavailable; it does not automatically retry with the approximation.
 
 Plozz Advanced keeps the AetherEngine revision selected by upstream Plozz. Only
 the optional playback components and their runtime controls are enabled; source

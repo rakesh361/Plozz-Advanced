@@ -2,6 +2,26 @@ import CoreModels
 import XCTest
 
 final class AdvancedPlaybackSettingsTests: XCTestCase {
+    @MainActor
+    func testProfileConversionChoiceDoesNotChangeDeviceReconstructionChoice() throws {
+        let name = "Advanced.ProfileConversion.\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let device = AdvancedPlaybackSettingsStore(defaults: defaults)
+        device.save(.init(spatialAudio: false, dolbyVisionFEL: true))
+        let primary = PlaybackSettingsStore(defaults: defaults)
+        let guest = PlaybackSettingsStore(defaults: defaults, namespace: "guest")
+        XCTAssertTrue(primary.load().dolbyVisionFELConversion)
+        let model = PlaybackSettingsModel(store: primary)
+        model.settings.dolbyVisionFELConversion = false
+        XCTAssertFalse(primary.load().dolbyVisionFELConversion)
+        XCTAssertTrue(guest.load().dolbyVisionFELConversion)
+        XCTAssertTrue(device.load().dolbyVisionFEL)
+        model.settings.dolbyVisionFELConversion = true
+        XCTAssertTrue(primary.load().dolbyVisionFELConversion)
+        XCTAssertTrue(device.load().dolbyVisionFEL)
+    }
+
     func testDeviceStoresPersistIndependentlyAndIgnoreProfileFlags() throws {
         let names = ["Advanced.DeviceA.\(UUID())", "Advanced.DeviceB.\(UUID())"]
         let a = try XCTUnwrap(UserDefaults(suiteName: names[0]))

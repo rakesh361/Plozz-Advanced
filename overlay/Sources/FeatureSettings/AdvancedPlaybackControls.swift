@@ -29,7 +29,7 @@ struct AdvancedPlaybackControls: View {
             }
             Toggle("Dolby Vision FEL (experimental)", isOn: $fel)
                 .accessibilityIdentifier("advanced-dolby-vision-fel")
-            Text("May impact performance. Applies to supported Profile 7 videos.")
+            Text("Requires P7 FEL → P8.1 conversion to be on. Uses full FEL reconstruction instead of the brightness approximation for supported Profile 7 videos. May impact performance.")
                 .settingsHelperText().fixedSize(horizontal: false, vertical: true)
         }
     }

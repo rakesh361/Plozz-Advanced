@@ -22,6 +22,10 @@ def release_identity(root=ROOT):
         raise ValueError(f'Upstream release tag/build mismatch: {tag}, {build}')
     if not re.fullmatch(r'\d{4}\.\d{1,2}\.\d{1,2}', version):
         raise ValueError('Unexpected upstream display version')
+    advanced = config.get('advanced_version', tag.split('/')[1])
+    if not re.fullmatch(re.escape(tag.split('/')[1]) + r'(?:\.[1-9]\d?)?', advanced):
+        raise ValueError('Advanced version must match upstream or append a positive patch number')
+    build = '.'.join(str(int(part)) for part in advanced.split('.'))
     return version, build
 
 

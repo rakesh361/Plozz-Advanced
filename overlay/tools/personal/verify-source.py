@@ -43,7 +43,8 @@ def verify(root=ROOT):
              'AdvancedPlaybackSettingsStore().load()',
              'AdvancedPlaybackOptions.apply(advanced, policy: outputPolicy, to: &options)'],
         'Sources/EnginePlozzigen/AdvancedPlaybackOptions.swift':
-            ['options.preferDualLayerDolbyVision = true',
+            ['if options.foldsDolbyVisionFEL && settings.dolbyVisionFEL && !policy.suppressesDisplayMatching',
+             'options.preferDualLayerDolbyVision = true',
              'options.objectAudioRendering = .render',
              '!options.isLive, policy.isAudible, !policy.sharesAudioSession'],
         'Sources/FeatureSettings/AdvancedPlaybackControls.swift':

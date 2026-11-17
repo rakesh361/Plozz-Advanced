@@ -37,6 +37,16 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.source.write_text(json.dumps({'upstream_tag': 'release/070'}))
         self.assertEqual(identity.release_identity(self.root), ('2026.11.4', '70'))
 
+    def test_advanced_patch_displays_own_number_without_changing_upstream_source(self):
+        config = {'upstream_tag': 'release/069.2', 'advanced_version': '069.2.1'}
+        self.source.write_text(json.dumps(config))
+        self.assertEqual(identity.release_identity(self.root), ('2026.11.3', '69.2.1'))
+        for label in ['070', '069.2.0', '069.2.01', '069.2.1\nextra']:
+            config['advanced_version'] = label
+            self.source.write_text(json.dumps(config))
+            with self.subTest(label=label), self.assertRaisesRegex(ValueError, 'Advanced version'):
+                identity.release_identity(self.root)
+
     def test_missing_or_mismatched_release_stops_build(self):
         self.entries[1]['build'] = '69.1'
         self.save_catalog()

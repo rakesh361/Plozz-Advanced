@@ -46,7 +46,7 @@ class PreservationTests(unittest.TestCase):
     def test_each_missing_trait_is_rejected(self):
         manifest = (ROOT / 'Package.swift').read_text()
         for trait in ['TrueHDObjectAudio', 'DTSXObjectAudio', 'DualLayerDolbyVision',
-                      'DolbyVisionStillReshaping']:
+                      'DolbyVisionStillReshaping', 'DolbyVisionFelCurves']:
             with self.subTest(trait=trait):
                 (self.root / 'Package.swift').write_text(manifest.replace(f'"{trait}"', ''))
                 with self.assertRaisesRegex(ValueError, 'traits missing'):
@@ -57,6 +57,12 @@ class PreservationTests(unittest.TestCase):
         path.write_text(path.read_text().replace(
             'AdvancedPlaybackOptions.apply(advanced, policy: outputPolicy, to: &options)',
             '// Advanced hookup removed'))
+        with self.assertRaisesRegex(ValueError, 'Playback preservation check failed'):
+            guard.verify(self.root)
+
+    def test_experimental_bypassing_conversion_is_rejected(self):
+        path = self.root / 'Sources/EnginePlozzigen/AdvancedPlaybackOptions.swift'
+        path.write_text(path.read_text().replace('options.foldsDolbyVisionFEL && ', ''))
         with self.assertRaisesRegex(ValueError, 'Playback preservation check failed'):
             guard.verify(self.root)
 
