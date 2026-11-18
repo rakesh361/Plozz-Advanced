@@ -1,9 +1,10 @@
 """Check that routine engine updates do not require feature-hook rebases."""
 import sys
 import unittest
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from features import TRAITS, enable_manifest, replace_once, decoder_pin
+from features import TRAITS, enable_manifest, replace_once, decoder_pin, resolve_tag
 
 
 class FeatureHookTests(unittest.TestCase):
@@ -34,6 +35,21 @@ class FeatureHookTests(unittest.TestCase):
 
 
 class DecoderPinTests(unittest.TestCase):
+    def test_dependency_lookup_uses_workflow_token_when_available(self):
+        for environment in [{}, {'GH_TOKEN': 'test-token'}]:
+            with self.subTest(authenticated=bool(environment)), \
+                    patch.dict('os.environ', environment, clear=True), \
+                    patch('check.urllib.request.urlopen') as urlopen:
+                response = MagicMock()
+                response.read.return_value = '{"sha": "' + 'b' * 40 + '"}'
+                urlopen.return_value.__enter__.return_value = response
+                self.assertEqual(resolve_tag('owner/LibTrueHD', '3.2.0'), 'b' * 40)
+                request = urlopen.call_args.args[0]
+                self.assertEqual(request.full_url,
+                                 'https://api.github.com/repos/owner/LibTrueHD/commits/3.2.0')
+                self.assertEqual(request.get_header('Authorization'),
+                                 'Bearer test-token' if environment else None)
+
     def test_existing_engine_decoder_lock_is_preserved(self):
         pin = {'identity': 'libtruehd', 'state': {'revision': 'a' * 40}}
         self.assertEqual(decoder_pin({'pins': [pin]}, '', None), pin)

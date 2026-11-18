@@ -67,6 +67,7 @@ jobs:
           echo "$RUNNER_TEMP/recipe-tools/xcodegen/bin" >> "$GITHUB_PATH"
       - name: Fetch upstream and restore retained features
         env:
+          GH_TOKEN: ${{ github.token }}
           UPSTREAM_TAG: ${{ needs.check.outputs.tag }}
           UPSTREAM_COMMIT: ${{ needs.check.outputs.commit }}
           ADVANCED_VERSION: ${{ needs.check.outputs.version }}

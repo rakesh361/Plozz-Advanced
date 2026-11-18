@@ -6,6 +6,7 @@ Owned settings, controls, policy and regression tests live in overlay/.
 import json
 import re
 import urllib.request
+from check import api
 
 TRAITS = ('TrueHDObjectAudio', 'DTSXObjectAudio', 'DualLayerDolbyVision',
           'DolbyVisionStillReshaping', 'DolbyVisionFelCurves')
@@ -57,13 +58,8 @@ def decoder_pin(engine_lock, manifest, resolve_revision):
     return decoder
 
 
-def github_json(url):
-    with urllib.request.urlopen(url, timeout=30) as response:
-        return json.load(response)
-
-
 def resolve_tag(repository, version):
-    return github_json(f'https://api.github.com/repos/{repository}/commits/{version}')['sha']
+    return api(f'repos/{repository}/commits/{version}')['sha']
 
 
 def enable(root, engine_lock=None):
