@@ -26,6 +26,20 @@ def edit(root, path, changes):
     target.write_text(source)
 
 
+def update_fel_help(root):
+    old = 'Approximates enhancement-layer brightness without full FEL reconstruction. Turn off to use HDR10.'
+    settings = root / 'Sources/FeatureSettings'
+    paths = [settings / name for name in ('PreferenceDetailViews.swift', 'VideoUpscalingControl.swift')]
+    sources = {path: path.read_text() for path in paths if path.is_file()}
+    matches = [path for path, source in sources.items() if old in source]
+    if len(matches) != 1:
+        raise ValueError('Expected one location for the FEL conversion description')
+    path = matches[0]
+    path.write_text(replace_once(sources[path], old,
+        'Approximates enhancement-layer brightness, or uses full FEL reconstruction when enabled in Advanced. '
+        'Turn off to use HDR10 for FEL videos.'))
+
+
 def enable_manifest(source):
     pattern = (r'(\.package\(\s*url: "https://github.com/([^"\s]+/AetherEngine)",'
                r'\s*revision: "([a-f0-9]{40})",\s*traits: )\[([^]]*)\]')
@@ -107,10 +121,7 @@ def enable(root, engine_lock=None):
         ('                .accessibilityIdentifier("playback-external-player")\n            }',
          '                .accessibilityIdentifier("playback-external-player")\n            }\n            SettingsSectionGroup("Advanced playback") { AdvancedPlaybackControls() }'),
     ])
-    edit(root, 'Sources/FeatureSettings/PreferenceDetailViews.swift', [
-        ('Approximates enhancement-layer brightness without full FEL reconstruction. Turn off to use HDR10.',
-         'Approximates enhancement-layer brightness, or uses full FEL reconstruction when enabled in Advanced. Turn off to use HDR10 for FEL videos.'),
-    ])
+    update_fel_help(root)
     decoder_version = decoder['state'].get('version')
     if not decoder_version or not re.fullmatch(r'\d+\.\d+\.\d+', decoder_version):
         raise ValueError('Expected a versioned LibTrueHD dependency for attribution')

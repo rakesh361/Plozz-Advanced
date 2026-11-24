@@ -1,10 +1,11 @@
 """Check that routine engine updates do not require feature-hook rebases."""
 import sys
 import unittest
+from tempfile import TemporaryDirectory
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
-from features import TRAITS, enable_manifest, replace_once, decoder_pin, resolve_tag
+from features import TRAITS, enable_manifest, replace_once, decoder_pin, resolve_tag, update_fel_help
 
 
 class FeatureHookTests(unittest.TestCase):
@@ -32,6 +33,26 @@ class FeatureHookTests(unittest.TestCase):
         for source in ['removed', 'hook hook']:
             with self.assertRaises(ValueError):
                 replace_once(source, 'hook', 'enabled')
+
+    def test_fel_description_follows_shared_control_and_rejects_ambiguous_locations(self):
+        old = 'Approximates enhancement-layer brightness without full FEL reconstruction. Turn off to use HDR10.'
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings = root / 'Sources/FeatureSettings'
+            settings.mkdir(parents=True)
+            detail = settings / 'PreferenceDetailViews.swift'
+            shared = settings / 'VideoUpscalingControl.swift'
+            for current, other in [(detail, shared), (shared, detail)]:
+                with self.subTest(location=current.name):
+                    current.write_text(old)
+                    other.write_text('Unrelated settings')
+                    update_fel_help(root)
+                    self.assertIn('uses full FEL reconstruction when enabled in Advanced', current.read_text())
+                    self.assertEqual(other.read_text(), 'Unrelated settings')
+            detail.write_text(old)
+            shared.write_text(old)
+            with self.assertRaises(ValueError):
+                update_fel_help(root)
 
 
 class DecoderPinTests(unittest.TestCase):
