@@ -44,21 +44,41 @@ class SimulatorTests(unittest.TestCase):
 
     @patch.object(simulator.subprocess, 'run')
     @patch.object(simulator, 'simctl_list', return_value=READY)
-    def test_existing_device_needs_no_mutation(self, listing, run):
+    def test_existing_device_boots_before_build(self, listing, run):
         self.assertEqual(simulator.prepare_device('27.0')[0], 'fixture')
-        run.assert_not_called()
+        run.assert_called_once_with(['xcrun', 'simctl', 'bootstatus', 'fixture', '-b'],
+                                    stdout=simulator.sys.stderr, check=True, timeout=300)
 
+    @patch.object(simulator.subprocess, 'check_output', return_value='fresh\n')
     @patch.object(simulator.subprocess, 'run')
-    @patch.object(simulator, 'simctl_list', side_effect=[EMPTY, RUNTIMES, EMPTY, TYPES, READY])
-    def test_installed_runtime_with_no_device_creates_one(self, listing, run):
-        self.assertEqual(simulator.prepare_device('27.0')[0], 'fixture')
-        self.assertEqual(run.call_args.args[0], [
+    @patch.object(simulator, 'simctl_list', side_effect=[EMPTY, RUNTIMES, TYPES])
+    def test_installed_runtime_with_no_device_creates_one(self, listing, run, create):
+        self.assertEqual(simulator.prepare_device('27.0')[0], 'fresh')
+        self.assertEqual(create.call_args.args[0], [
             'xcrun', 'simctl', 'create', 'Apple TV Plozz Advanced CI', 'tv-type', RUNTIME])
+        self.assertEqual(run.call_args.args[0], [
+            'xcrun', 'simctl', 'bootstatus', 'fresh', '-b'])
 
+    @patch.object(simulator.subprocess, 'check_output', return_value='fresh\n')
+    @patch.object(simulator.subprocess, 'run', side_effect=[subprocess.CalledProcessError(2, 'boot'), None])
+    @patch.object(simulator, 'simctl_list', side_effect=[READY, RUNTIMES, TYPES])
+    def test_failed_existing_boot_recovers_with_new_device(self, listing, run, create):
+        self.assertEqual(simulator.prepare_device('27.0')[0], 'fresh')
+        self.assertEqual([call.args[0][3] for call in run.call_args_list], ['fixture', 'fresh'])
+
+    @patch.object(simulator.subprocess, 'check_output', return_value='fresh\n')
+    @patch.object(simulator.subprocess, 'run', side_effect=subprocess.CalledProcessError(2, 'boot'))
+    @patch.object(simulator, 'simctl_list', side_effect=[READY, RUNTIMES, TYPES])
+    def test_failed_fresh_device_boot_stops_setup(self, listing, run, create):
+        with self.assertRaises(subprocess.CalledProcessError):
+            simulator.prepare_device('27.0')
+        self.assertEqual(run.call_count, 2)
+
+    @patch.object(simulator.subprocess, 'check_output', return_value='fresh\n')
     @patch.object(simulator.subprocess, 'run')
-    @patch.object(simulator, 'simctl_list', side_effect=[EMPTY, {}, RUNTIMES, EMPTY, TYPES, READY])
-    def test_missing_runtime_downloads_exact_sdk_before_creating_device(self, listing, run):
-        self.assertEqual(simulator.prepare_device('27.0')[0], 'fixture')
+    @patch.object(simulator, 'simctl_list', side_effect=[EMPTY, {}, RUNTIMES, TYPES])
+    def test_missing_runtime_downloads_exact_sdk_before_creating_device(self, listing, run, create):
+        self.assertEqual(simulator.prepare_device('27.0')[0], 'fresh')
         self.assertEqual(run.call_args_list[0].args[0], [
             'xcodebuild', '-downloadPlatform', 'tvOS', '-buildVersion', '27.0'])
         self.assertEqual(run.call_count, 2)

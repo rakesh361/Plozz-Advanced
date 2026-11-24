@@ -14,41 +14,49 @@ def simctl_list(kind):
     ))
 
 
+def boot_device(identifier):
+    subprocess.run(['xcrun', 'simctl', 'bootstatus', identifier, '-b'],
+                   stdout=sys.stderr, check=True, timeout=300)
+
+
 def prepare_device(sdk_version):
-    """Repair missing CI runtime/device provisioning without changing OS version."""
-    devices = simctl_list('devices')
-    try:
-        return select_device(devices, sdk_version)
-    except ValueError:
-        pass
+    """Return a bootable CI device, provisioning the matching runtime if needed."""
     runtime = 'com.apple.CoreSimulator.SimRuntime.tvOS-' + sdk_version.replace('.', '-')
-    runtimes = simctl_list('runtimes')
-    if not any(r.get('identifier') == runtime and r.get('isAvailable')
-               for r in runtimes.get('runtimes', [])):
+    try:
+        device = select_device(simctl_list('devices'), sdk_version)
+    except ValueError:
+        device = None
+    if device is not None:
+        try:
+            boot_device(device[0])
+            return device
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            print(f'Boot failed for {device[0]}; provisioning a fresh device: {error}', file=sys.stderr)
+
+    def runtime_available():
+        return any(r.get('identifier') == runtime and r.get('isAvailable')
+                   for r in simctl_list('runtimes').get('runtimes', []))
+
+    if not runtime_available():
         print(f'Installing tvOS {sdk_version} simulator runtime', file=sys.stderr)
         subprocess.run(
             ['xcodebuild', '-downloadPlatform', 'tvOS', '-buildVersion', sdk_version],
             stdout=sys.stderr, check=True, timeout=900,
         )
-        runtimes = simctl_list('runtimes')
-        if not any(r.get('identifier') == runtime and r.get('isAvailable')
-                   for r in runtimes.get('runtimes', [])):
-            raise ValueError(f'Runtime {runtime} unavailable after installation: {runtimes}')
-    # Downloading a runtime can also populate its default devices.
-    try:
-        return select_device(simctl_list('devices'), sdk_version)
-    except ValueError:
-        pass
+        if not runtime_available():
+            raise ValueError(f'Runtime {runtime} unavailable after installation')
     types = simctl_list('devicetypes').get('devicetypes', [])
     types = [t for t in types if 'Apple TV' in t.get('name', '')]
     types.sort(key=lambda t: ('1080p' not in t['name'], '4K' not in t['name'], t['name']))
     if not types:
         raise ValueError('No Apple TV simulator device type installed')
-    subprocess.run(
-        ['xcrun', 'simctl', 'create', 'Apple TV Plozz Advanced CI', types[0]['identifier'], runtime],
-        stdout=sys.stderr, check=True, timeout=300,
-    )
-    return select_device(simctl_list('devices'), sdk_version)
+    name = 'Apple TV Plozz Advanced CI'
+    identifier = subprocess.check_output(
+        ['xcrun', 'simctl', 'create', name, types[0]['identifier'], runtime],
+        text=True, timeout=300,
+    ).strip()
+    boot_device(identifier)
+    return identifier, name
 
 
 def select_device(devices: dict, sdk_version: str) -> tuple[str, str]:
@@ -72,7 +80,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk-version", required=True)
     parser.add_argument('--prepare', action='store_true',
-                        help='Install the matching runtime and create a device if missing (CI only)')
+                        help='Boot a matching device and provision it if needed (CI only)')
     args = parser.parse_args()
     try:
         if args.prepare:
